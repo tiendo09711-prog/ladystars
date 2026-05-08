@@ -2,7 +2,9 @@ import bcrypt from 'bcryptjs';
 import mongoose, { type Model } from 'mongoose';
 import { connectDatabase } from './config/database.js';
 import { User } from './core/auth/user.model.js';
+import { AuditLog } from './core/audit/audit.model.js';
 import { Branch } from './core/org/branch.model.js';
+import { StoreSetting } from './core/settings/settings.model.js';
 import { MenuItem, Permission, Role } from './core/system/system.models.js';
 import { AccountingType, ExpensePayment, PayPerson, Receipt } from './modules/accounting/accounting.models.js';
 import { Customer, CustomerGroup } from './modules/customer/customer.models.js';
@@ -36,11 +38,14 @@ async function load() {
   await connectDatabase();
 
   const passwordHash = await bcrypt.hash('123456789', 10);
+  void AuditLog;
   const admin = await upsert(User, { email: 'admin@myerp.local' }, {
     name: 'Admin',
     email: 'admin@myerp.local',
     passwordHash,
-    role: 'admin',
+    role: 'owner',
+    status: 'open',
+    isRootOwner: true,
     isActive: true,
   });
 
@@ -51,6 +56,15 @@ async function load() {
     address: 'LadyStars Store',
     isDefault: true,
     isActive: true,
+  });
+
+  await upsert(StoreSetting, { singletonKey: 'store' }, {
+    singletonKey: 'store',
+    shopName: 'LadyStars',
+    address: 'LadyStars Store',
+    phone: '0900000000',
+    taxCode: '',
+    updatedBy: admin._id,
   });
 
   const category = await upsert(Category, { name: 'Hàng hóa' }, { name: 'Hàng hóa', userId: admin._id });

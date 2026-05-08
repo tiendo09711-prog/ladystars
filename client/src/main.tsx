@@ -11,6 +11,8 @@ import { VendorPage } from './modules/vendor/VendorPage';
 import { AccountingPage } from './modules/accounting/AccountingPage';
 import { TaskPage } from './modules/task/TaskPage';
 import { PrintFormsPage } from './modules/printForms/PrintFormsPage';
+import { StaffPage } from './modules/staff/StaffPage';
+import { SettingsPage } from './modules/settings/SettingsPage';
 import './styles/app.css';
 
 const router = createBrowserRouter([
@@ -27,6 +29,11 @@ const router = createBrowserRouter([
       { path: 'accounting', element: <AccountingPage /> },
       { path: 'tasks', element: <TaskPage /> },
       { path: 'print-forms', element: <PrintFormsPage /> },
+      { path: 'staff', element: <StaffPage /> },
+      { path: 'staff/create', element: <StaffPage /> },
+      { path: 'staff/accounts', element: <StaffPage /> },
+      { path: 'staff/stats', element: <StaffPage /> },
+      { path: 'settings', element: <SettingsPage /> },
     ],
   },
 ]);

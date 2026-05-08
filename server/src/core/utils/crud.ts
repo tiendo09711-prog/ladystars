@@ -1,5 +1,6 @@
 import type { Model } from 'mongoose';
 import type { Request, Response } from 'express';
+import { writeAuditLog } from '../audit/audit.service.js';
 
 function cleanPayload(value: any): any {
   if (Array.isArray(value)) return value.map(cleanPayload);
@@ -10,6 +11,21 @@ function cleanPayload(value: any): any {
 }
 
 export function crudController<T>(model: Model<T>) {
+  const modelName = model.modelName;
+  const hasPath = (path: string) => Boolean(model.schema.path(path));
+  const withUserFields = (req: Request, payload: Record<string, any>, isCreate: boolean) => {
+    const userId = (req as any).user?.sub;
+    if (!userId) return payload;
+    const next = { ...payload };
+    if (isCreate) {
+      for (const path of ['userId', 'userCreatedId', 'createdBy', 'authorId', 'ownerId']) {
+        if (hasPath(path) && !next[path]) next[path] = userId;
+      }
+    }
+    if (hasPath('updatedBy')) next.updatedBy = userId;
+    return next;
+  };
+
   return {
     async list(req: Request, res: Response) {
       const page = Math.max(Number(req.query.page ?? 1), 1);
@@ -28,17 +44,40 @@ export function crudController<T>(model: Model<T>) {
       res.json(item);
     },
     async create(req: Request, res: Response) {
-      const item = await model.create(cleanPayload(req.body));
+      const item = await model.create(withUserFields(req, cleanPayload(req.body), true));
+      await writeAuditLog(req, {
+        action: 'crud.create',
+        module: modelName,
+        resource: modelName,
+        resourceId: (item as any).id,
+        after: item,
+      });
       res.status(201).json(item);
     },
     async update(req: Request, res: Response) {
-      const item = await model.findByIdAndUpdate(req.params.id, cleanPayload(req.body), { new: true, runValidators: true });
+      const before = await model.findById(req.params.id);
+      const item = await model.findByIdAndUpdate(req.params.id, withUserFields(req, cleanPayload(req.body), false), { new: true, runValidators: true });
       if (!item) return res.status(404).json({ message: 'Not found' });
+      await writeAuditLog(req, {
+        action: 'crud.update',
+        module: modelName,
+        resource: modelName,
+        resourceId: (item as any).id,
+        before,
+        after: item,
+      });
       res.json(item);
     },
     async remove(req: Request, res: Response) {
       const item = await model.findByIdAndDelete(req.params.id);
       if (!item) return res.status(404).json({ message: 'Not found' });
+      await writeAuditLog(req, {
+        action: 'crud.delete',
+        module: modelName,
+        resource: modelName,
+        resourceId: (item as any).id,
+        before: item,
+      });
       res.status(204).send();
     },
   };
