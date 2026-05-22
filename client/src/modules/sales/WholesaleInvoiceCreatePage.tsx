@@ -1,0 +1,1260 @@
+import { useState, useEffect } from 'react';
+import { useSearchParams, useNavigate, useParams } from 'react-router-dom';
+import { 
+  ArrowLeft, 
+  Calendar, 
+  DollarSign, 
+  FileText, 
+  Phone, 
+  Save, 
+  Tag, 
+  User, 
+  Warehouse, 
+  Briefcase, 
+  Percent, 
+  CreditCard, 
+  Info,
+  CheckCircle,
+  AlertCircle,
+  Search,
+  Trash2,
+  Plus,
+  Coins,
+  Printer,
+  MapPin,
+  Building,
+  PlusCircle
+} from 'lucide-react';
+import { http } from '../../core/api/http';
+
+interface InvoiceProduct {
+  _id?: string;
+  code: string;
+  name: string;
+  stock: number;
+  qty: number;
+  price: number;
+  cost: number;
+  discountType: 'percentage' | 'fixed';
+  discountValue: number;
+  total: number;
+  unit: string;
+  barcode?: string;
+  imei?: string;
+}
+
+export function WholesaleInvoiceCreatePage() {
+  const { channel } = useParams();
+  const [searchParams] = useSearchParams();
+  const branchId = searchParams.get('branchId');
+  const navigate = useNavigate();
+
+  const [branch, setBranch] = useState<any>(null);
+  const [loadingBranch, setLoadingBranch] = useState(false);
+
+  // Expanded Form State to map 100% with extracted structure
+  const [form, setForm] = useState({
+    id: 'HDSI-' + Math.floor(100000 + Math.random() * 900000),
+    date: new Date().toLocaleDateString('vi-VN') + ' ' + new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
+    cashier: 'Lê Sỹ Bách',
+    salesperson: '',
+    techStaff: '',
+    type: 'Xuất bán sỉ [S]',
+    warehouse: '',
+    wholesaleInvoiceLabel: '',
+    orderSource: 'Trực tiếp',
+    description: '',
+    
+    // Customer Info (Individual)
+    customerPhone: '',
+    customerName: '',
+    customerCode: '', // Mã thẻ
+    email: '',
+    dob: '',
+    addressLocation: '', // Tỉnh/Thành phố, Quận/Huyện, Phường/Xã
+    address: '', // Địa chỉ chi tiết
+    
+    // Customer Info (Enterprise)
+    companyName: '',
+    taxId: '',
+    poContractNumber: '', // Số PO - Hợp đồng
+    contractSigningDate: '', // Ngày ký hợp đồng
+    
+    // VAT Invoice
+    hasVat: false, // Trạng thái xuất hóa đơn VAT
+    vatInvoiceNumber: '', // Số hóa đơn VAT
+    vatInvoiceDate: '', // Ngày xuất hóa đơn
+    vatPercent: 10, // VAT (%)
+    
+    // Payments
+    prepaidFromOrder: 0, // Đã thanh toán từ đơn hàng
+    paymentCash: 0,      // Tiền mặt
+    paymentTransfer: 0,  // Chuyển khoản
+    paymentCard: 0,      // Quẹt thẻ
+    paymentOther: 0,     // Khác
+    
+    paymentMethod: 'Tiền mặt',
+    orderDiscount: 0,    // Chiết khấu đơn hàng
+    autoDiscount: true,  // Tự động chiết khấu
+    
+    totalAmount: 0,
+    paidAmount: 0,
+    debtAmount: 0,
+    status: 'Mới',
+    autoPrint: false,    // Tự động in sau khi lưu hóa đơn (F10)
+  });
+
+  // Multi-product list
+  const [products, setProducts] = useState<InvoiceProduct[]>([]);
+  const [dbProducts, setDbProducts] = useState<any[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showSearchResults, setShowSearchResults] = useState(false);
+  const [productTypeTab, setProductTypeTab] = useState<'normal' | 'imei'>('normal');
+
+  const [isSaving, setIsSaving] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+
+  // Fetch branch details
+  useEffect(() => {
+    if (branchId) {
+      setLoadingBranch(true);
+      http.get(`/system/branches/${branchId}`)
+        .then((res) => {
+          setBranch(res.data);
+          setForm(prev => ({
+            ...prev,
+            warehouse: res.data?.name || ''
+          }));
+        })
+        .catch((err) => {
+          console.error("Lỗi lấy thông tin kho:", err);
+        })
+        .finally(() => {
+          setLoadingBranch(false);
+        });
+    }
+  }, [branchId]);
+
+  // Load products list for local fast auto-suggest
+  useEffect(() => {
+    http.get('/products/products?limit=150')
+      .then((res) => {
+        setDbProducts(res.data.items ?? []);
+      })
+      .catch((err) => {
+        console.error("Lỗi lấy danh sách sản phẩm:", err);
+      });
+  }, []);
+
+  // Hotkeys Hook: F3 search, F4 phone search, F9 save, F10 toggle auto-print
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'F3') {
+        e.preventDefault();
+        const el = document.getElementById('product-search-input');
+        if (el) el.focus();
+      } else if (e.key === 'F4') {
+        e.preventDefault();
+        const el = document.getElementById('customer-phone-input');
+        if (el) el.focus();
+      } else if (e.key === 'F9') {
+        e.preventDefault();
+        const btn = document.getElementById('save-invoice-btn');
+        if (btn) btn.click();
+      } else if (e.key === 'F10') {
+        e.preventDefault();
+        setForm(prev => ({ ...prev, autoPrint: !prev.autoPrint }));
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Auto-calculator engine
+  useEffect(() => {
+    // 1. Calculate individual product line totals
+    let tempSubtotal = 0;
+    let tempProductDiscount = 0;
+    
+    const updatedProducts = products.map(prod => {
+      const discVal = prod.discountType === 'percentage' 
+        ? prod.price * (prod.discountValue / 100)
+        : prod.discountValue;
+      const lineTotal = Math.max(0, prod.price - discVal) * prod.qty;
+      tempSubtotal += prod.price * prod.qty;
+      tempProductDiscount += discVal * prod.qty;
+      return { ...prod, total: lineTotal };
+    });
+
+    // Prevent render loops by checking if totals changed
+    const hasTotalChanged = updatedProducts.some((p, i) => p.total !== products[i]?.total);
+    if (hasTotalChanged) {
+      setProducts(updatedProducts);
+      return;
+    }
+
+    const subtotalAfterDiscount = Math.max(0, tempSubtotal - tempProductDiscount);
+
+    // 2. VAT Calculation
+    const vatPercent = Number(form.vatPercent) || 0;
+    const vatAmount = form.hasVat ? Math.round(subtotalAfterDiscount * (vatPercent / 100)) : 0;
+
+    // 3. Overall Order Total
+    const orderDiscount = Number(form.orderDiscount) || 0;
+    const totalAmount = Math.max(0, subtotalAfterDiscount + vatAmount - orderDiscount);
+
+    // 4. Paid Amount from multi-method split payments
+    const prepaid = Number(form.prepaidFromOrder) || 0;
+    const cash = Number(form.paymentCash) || 0;
+    const transfer = Number(form.paymentTransfer) || 0;
+    const card = Number(form.paymentCard) || 0;
+    const other = Number(form.paymentOther) || 0;
+    const paidAmount = prepaid + cash + transfer + card + other;
+
+    // 5. Debt
+    const debtAmount = Math.max(0, totalAmount - paidAmount);
+    const status = debtAmount > 0 ? 'Còn nợ' : 'Đã thanh toán';
+
+    setForm(prev => {
+      if (
+        prev.totalAmount === totalAmount &&
+        prev.paidAmount === paidAmount &&
+        prev.debtAmount === debtAmount &&
+        prev.status === status
+      ) {
+        return prev;
+      }
+      return {
+        ...prev,
+        totalAmount,
+        paidAmount,
+        debtAmount,
+        status
+      };
+    });
+  }, [
+    products,
+    form.vatPercent,
+    form.hasVat,
+    form.orderDiscount,
+    form.prepaidFromOrder,
+    form.paymentCash,
+    form.paymentTransfer,
+    form.paymentCard,
+    form.paymentOther
+  ]);
+
+  const handleChange = (field: string, value: any) => {
+    setForm(prev => ({ ...prev, [field]: value }));
+  };
+
+  // Look up customer by phone
+  const lookupCustomer = async (phoneStr: string) => {
+    if (!phoneStr.trim()) return;
+    try {
+      const res = await http.get(`/customers/customers?phone=${phoneStr.trim()}`);
+      const list = res.data.items ?? [];
+      if (list.length > 0) {
+        const c = list[0];
+        setForm(prev => ({
+          ...prev,
+          customerName: c.name || '',
+          customerCode: c.code || '',
+          email: c.email || '',
+          dob: c.birthday ? new Date(c.birthday).toISOString().split('T')[0] : '',
+          address: c.address || '',
+          companyName: c.company || '',
+          taxId: c.vat || '',
+        }));
+      }
+    } catch (err) {
+      console.error("Lỗi tìm kiếm khách hàng:", err);
+    }
+  };
+
+  // Add Product Helpers
+  const addProduct = (prod: any) => {
+    const existing = products.find(p => p.code === prod.code);
+    if (existing) {
+      setProducts(products.map(p => p.code === prod.code ? { ...p, qty: p.qty + 1 } : p));
+    } else {
+      setProducts([
+        ...products,
+        {
+          _id: prod._id,
+          code: prod.code,
+          name: prod.name,
+          stock: prod.qty ?? 0,
+          qty: 1,
+          price: prod.price ?? 0,
+          cost: prod.cost ?? 0,
+          discountType: 'fixed',
+          discountValue: 0,
+          total: prod.price ?? 0,
+          unit: prod.unit ?? 'Cái',
+          barcode: prod.barcode ?? '',
+          imei: '',
+        }
+      ]);
+    }
+    setSearchQuery('');
+    setShowSearchResults(false);
+  };
+
+  const addCustomProduct = () => {
+    setProducts([
+      ...products,
+      {
+        code: 'SPM-' + Math.floor(1000 + Math.random() * 9000),
+        name: searchQuery.trim() || 'Sản phẩm ngoài danh mục',
+        stock: 0,
+        qty: 1,
+        price: 0,
+        cost: 0,
+        discountType: 'fixed',
+        discountValue: 0,
+        total: 0,
+        unit: 'Cái',
+        imei: '',
+      }
+    ]);
+    setSearchQuery('');
+    setShowSearchResults(false);
+  };
+
+  const handleProductChange = (index: number, key: keyof InvoiceProduct, val: any) => {
+    const updated = [...products];
+    updated[index] = { ...updated[index], [key]: val };
+    setProducts(updated);
+  };
+
+  const removeProduct = (index: number) => {
+    setProducts(products.filter((_, i) => i !== index));
+  };
+
+  // Submit Handler
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.customerName.trim()) {
+      setErrorMessage('Vui lòng nhập tên khách hàng hoặc tìm kiếm bằng SĐT');
+      return;
+    }
+    if (products.length === 0) {
+      setErrorMessage('Vui lòng thêm ít nhất một sản phẩm vào hóa đơn');
+      return;
+    }
+
+    setErrorMessage('');
+    setIsSaving(true);
+
+    const totalQty = products.reduce((acc, p) => acc + p.qty, 0);
+    const firstProduct = products[0];
+    const totalCost = products.reduce((acc, p) => acc + (p.cost * p.qty), 0);
+    const subtotalBeforeDiscount = products.reduce((acc, p) => acc + (p.price * p.qty), 0);
+    const productDiscount = products.reduce((acc, p) => {
+      const disc = p.discountType === 'percentage' ? p.price * (p.discountValue / 100) : p.discountValue;
+      return acc + (disc * p.qty);
+    }, 0);
+    const subtotalAfterDiscount = Math.max(0, subtotalBeforeDiscount - productDiscount);
+    const profit = Math.max(0, subtotalAfterDiscount - totalCost);
+
+    const tabs = ['wholesale'];
+    if (productDiscount > 0 || form.orderDiscount > 0) {
+      tabs.push('discount');
+    }
+    if (form.debtAmount > 0) {
+      tabs.push('debt');
+    }
+
+    const payload = {
+      ...form,
+      products,
+      tabs,
+      
+      // Backward compatibility fields for table view
+      productCode: products.map(p => p.code).join(', '),
+      productName: products.map(p => p.name).join(', '),
+      barcode: firstProduct.barcode || '',
+      unit: firstProduct.unit || 'Cái',
+      imei: products.map(p => p.imei).filter(Boolean).join(', '),
+      price: firstProduct.price,
+      cost: firstProduct.cost,
+      quantity: totalQty,
+
+      // Calculated aggregates
+      subtotalBeforeDiscount,
+      subtotalAfterDiscount,
+      profit,
+      productDiscount,
+      productDiscountPercent: subtotalBeforeDiscount > 0 ? (productDiscount / subtotalBeforeDiscount) * 100 : 0,
+      totalProducts: totalQty,
+      totalBeforeDiscount: subtotalBeforeDiscount,
+    };
+
+    try {
+      await http.post('/products/wholesale-invoices', payload);
+      setSuccessMessage('Hóa đơn bán sỉ đã được tạo thành công!');
+      if (form.autoPrint) {
+        console.log("In hóa đơn...");
+        // In-browser mock print or trigger window.print()
+      }
+      setTimeout(() => {
+        navigate(`/sales-channels/${channel}/wholesale`);
+      }, 1200);
+    } catch (err: any) {
+      console.error(err);
+      setErrorMessage(err.response?.data?.message ?? 'Lỗi khi lưu hóa đơn bán sỉ.');
+      setIsSaving(false);
+    }
+  };
+
+  // Local Search Autocomplete list
+  const autocompleteList = searchQuery.trim() === '' ? [] : dbProducts.filter(p => 
+    p.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    p.code?.toLowerCase().includes(searchQuery.toLowerCase())
+  ).slice(0, 10);
+
+  return (
+    <div style={{ maxWidth: '1600px', margin: '0 auto', padding: '24px', fontFamily: 'Inter, system-ui, sans-serif' }}>
+      
+      {/* Top Banner and Navigation Actions */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <button 
+            type="button" 
+            onClick={() => navigate(`/sales-channels/${channel}/wholesale`)}
+            style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              width: '40px', 
+              height: '40px', 
+              borderRadius: '10px', 
+              border: '1px solid #e2e8f0', 
+              background: '#ffffff', 
+              cursor: 'pointer',
+              color: '#475569',
+              transition: 'all 0.2s'
+            }}
+          >
+            <ArrowLeft size={18} />
+          </button>
+          <div>
+            <h1 style={{ fontSize: '24px', fontWeight: '700', color: '#0f172a', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              Tạo Mới Hóa Đơn Bán Sỉ
+            </h1>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginTop: '4px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Warehouse size={14} color="#7c3aed" />
+                <span style={{ fontSize: '13px', color: '#64748b', fontWeight: '500' }}>
+                  Kho xuất: {loadingBranch ? 'Đang tải...' : (branch ? `${branch.name} (${branch.code})` : 'Chưa chọn kho')}
+                </span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Briefcase size={14} color="#059669" />
+                <span style={{ fontSize: '13px', color: '#64748b', fontWeight: '500' }}>
+                  Thu ngân: {form.cashier}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <button 
+            type="button"
+            onClick={() => navigate(`/sales-channels/${channel}/wholesale`)}
+            style={{ borderRadius: '10px', padding: '10px 20px', fontSize: '14px', border: '1px solid #cbd5e1', background: '#ffffff', fontWeight: '600', color: '#475569', cursor: 'pointer' }}
+          >
+            Hủy bỏ
+          </button>
+          <button 
+            type="button"
+            id="save-invoice-btn"
+            disabled={isSaving}
+            onClick={handleSave}
+            style={{ 
+              borderRadius: '10px', 
+              padding: '10px 24px', 
+              fontSize: '14px', 
+              fontWeight: '600', 
+              background: 'linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)', 
+              color: '#ffffff',
+              border: 'none', 
+              boxShadow: '0 4px 14px rgba(124, 58, 237, 0.25)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              cursor: isSaving ? 'not-allowed' : 'pointer',
+              opacity: isSaving ? 0.7 : 1
+            }}
+          >
+            <Save size={16} />
+            {isSaving ? 'Đang lưu...' : 'Lưu (F9)'}
+          </button>
+        </div>
+      </div>
+
+      {errorMessage && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: '#fef2f2', border: '1px solid #fca5a5', color: '#b91c1c', padding: '14px 18px', borderRadius: '10px', marginBottom: '24px', fontSize: '14px', fontWeight: '500' }}>
+          <AlertCircle size={18} style={{ flexShrink: 0 }} />
+          <span>{errorMessage}</span>
+        </div>
+      )}
+
+      {successMessage && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: '#ecfdf5', border: '1px solid #6ee7b7', color: '#047857', padding: '14px 18px', borderRadius: '10px', marginBottom: '24px', fontSize: '14px', fontWeight: '500' }}>
+          <CheckCircle size={18} style={{ flexShrink: 0 }} />
+          <span>{successMessage}</span>
+        </div>
+      )}
+
+      {/* Main 70/30 Columns Layout */}
+      <form onSubmit={handleSave} style={{ display: 'grid', gridTemplateColumns: '1fr 420px', gap: '24px', alignItems: 'start' }}>
+        
+        {/* Left Column (70%) - Search, Product Table, Notes, Staff */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          
+          {/* Product Search & Table Box */}
+          <div style={{ background: '#ffffff', borderRadius: '14px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', overflow: 'hidden' }}>
+            
+            {/* Header: Product Type Tabs & F3 Search Bar */}
+            <div style={{ padding: '18px 20px', borderBottom: '1px solid #f1f5f9', background: '#f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+              
+              {/* Product Type Tabs */}
+              <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: '8px', padding: '3px' }}>
+                <button
+                  type="button"
+                  onClick={() => setProductTypeTab('normal')}
+                  style={{
+                    padding: '6px 14px',
+                    borderRadius: '6px',
+                    border: 'none',
+                    fontSize: '13px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    background: productTypeTab === 'normal' ? '#ffffff' : 'transparent',
+                    color: productTypeTab === 'normal' ? '#7c3aed' : '#64748b',
+                    boxShadow: productTypeTab === 'normal' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none',
+                    transition: 'all 0.15s'
+                  }}
+                >
+                  Sản phẩm thường
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setProductTypeTab('imei')}
+                  style={{
+                    padding: '6px 14px',
+                    borderRadius: '6px',
+                    border: 'none',
+                    fontSize: '13px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    background: productTypeTab === 'imei' ? '#ffffff' : 'transparent',
+                    color: productTypeTab === 'imei' ? '#7c3aed' : '#64748b',
+                    boxShadow: productTypeTab === 'imei' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none',
+                    transition: 'all 0.15s'
+                  }}
+                >
+                  Sản phẩm IMEI
+                </button>
+              </div>
+
+              {/* F3 Autocomplete Product Search Bar */}
+              <div style={{ position: 'relative', width: '380px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '0 12px', background: '#ffffff' }}>
+                  <Search size={16} color="#94a3b8" />
+                  <input
+                    type="text"
+                    id="product-search-input"
+                    placeholder="(F3) Tìm sản phẩm..."
+                    value={searchQuery}
+                    onChange={(e) => {
+                      setSearchQuery(e.target.value);
+                      setShowSearchResults(true);
+                    }}
+                    onFocus={() => setShowSearchResults(true)}
+                    style={{ border: 'none', background: 'transparent', outline: 'none', padding: '8px 0', width: '100%', fontSize: '13px', color: '#1e293b' }}
+                  />
+                </div>
+
+                {/* Dropdown Suggestions */}
+                {showSearchResults && searchQuery.trim() !== '' && (
+                  <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '8px', marginTop: '6px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', zIndex: 10, maxHeight: '300px', overflowY: 'auto' }}>
+                    {autocompleteList.length > 0 ? (
+                      autocompleteList.map(prod => (
+                        <div
+                          key={prod._id}
+                          onClick={() => addProduct(prod)}
+                          style={{ padding: '10px 14px', borderBottom: '1px solid #f1f5f9', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                          onMouseEnter={(e) => e.currentTarget.style.background = '#f5f3ff'}
+                          onMouseLeave={(e) => e.currentTarget.style.background = '#ffffff'}
+                        >
+                          <div>
+                            <div style={{ fontSize: '13px', fontWeight: '600', color: '#1e293b' }}>{prod.name}</div>
+                            <div style={{ fontSize: '11px', color: '#64748b' }}>Mã: {prod.code} | Tồn: {prod.qty ?? 0} | Giá: {(prod.price ?? 0).toLocaleString('vi-VN')} đ</div>
+                          </div>
+                          <PlusCircle size={16} color="#7c3aed" />
+                        </div>
+                      ))
+                    ) : (
+                      <div style={{ padding: '12px', textAlign: 'center', fontSize: '13px', color: '#64748b' }}>
+                        <span>Không tìm thấy sản phẩm. </span>
+                        <button type="button" onClick={addCustomProduct} style={{ border: 'none', background: 'none', color: '#7c3aed', fontWeight: '600', cursor: 'pointer', padding: 0 }}>
+                          Thêm sản phẩm mới sỉ
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Product Table */}
+            <div style={{ overflowX: 'auto', padding: '12px' }}>
+              {products.length === 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 20px', gap: '12px' }}>
+                  <Briefcase size={40} color="#cbd5e1" />
+                  <span style={{ fontSize: '14px', color: '#94a3b8', textAlign: 'center' }}>
+                    Chưa có hàng hóa nào được chọn. Nhấn F3 hoặc gõ vào thanh tìm kiếm để thêm sản phẩm sỉ.
+                  </span>
+                </div>
+              ) : (
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
+                  <thead>
+                    <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#475569', fontWeight: '600' }}>
+                      <th style={{ padding: '12px 8px', width: '40px' }}>#</th>
+                      <th style={{ padding: '12px 8px', width: '50px' }}>Ảnh</th>
+                      <th style={{ padding: '12px 8px' }}>Sản phẩm</th>
+                      <th style={{ padding: '12px 8px', width: '70px', textAlign: 'center' }}>Số tồn</th>
+                      <th style={{ padding: '12px 8px', width: '90px', textAlign: 'center' }}>Số lượng</th>
+                      <th style={{ padding: '12px 8px', width: '120px', textAlign: 'right' }}>Giá bán</th>
+                      <th style={{ padding: '12px 8px', width: '120px', textAlign: 'right' }}>Chiết khấu</th>
+                      <th style={{ padding: '12px 8px', width: '120px', textAlign: 'right' }}>Thành tiền</th>
+                      <th style={{ padding: '12px 8px', width: '40px', textAlign: 'center' }}></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {products.map((prod, idx) => (
+                      <tr 
+                        key={idx} 
+                        style={{ 
+                          borderBottom: '1px solid #f1f5f9',
+                          background: idx % 2 === 0 ? '#ffffff' : '#fafafa'
+                        }}
+                      >
+                        {/* Index */}
+                        <td style={{ padding: '12px 8px', color: '#64748b', fontWeight: '500' }}>{idx + 1}</td>
+                        
+                        {/* Image */}
+                        <td style={{ padding: '12px 8px' }}>
+                          <div style={{ width: '36px', height: '36px', borderRadius: '6px', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #e2e8f0', color: '#64748b' }}>
+                            <Tag size={16} />
+                          </div>
+                        </td>
+
+                        {/* Product Detail & IMEI */}
+                        <td style={{ padding: '12px 8px' }}>
+                          <div style={{ fontWeight: '600', color: '#1e293b' }}>{prod.name}</div>
+                          <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>Mã: {prod.code}</div>
+                          
+                          {/* Conditionally render IMEI field based on tab selection */}
+                          {(productTypeTab === 'imei' || prod.imei !== undefined) && (
+                            <div style={{ marginTop: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <span style={{ fontSize: '10px', fontWeight: '700', color: '#6d28d9', background: '#f5f3ff', padding: '1px 4px', borderRadius: '3px' }}>IMEI</span>
+                              <input
+                                type="text"
+                                placeholder="Nhập mã IMEI sản phẩm sỉ..."
+                                value={prod.imei || ''}
+                                onChange={(e) => handleProductChange(idx, 'imei', e.target.value)}
+                                style={{ border: '1px solid #cbd5e1', borderRadius: '4px', padding: '2px 6px', fontSize: '11px', width: '180px', outline: 'none' }}
+                              />
+                            </div>
+                          )}
+                        </td>
+
+                        {/* Stock */}
+                        <td style={{ padding: '12px 8px', textAlign: 'center', fontWeight: '600', color: prod.stock <= 5 ? '#e11d48' : '#059669' }}>
+                          {prod.stock}
+                        </td>
+
+                        {/* Quantity */}
+                        <td style={{ padding: '12px 8px', textAlign: 'center' }}>
+                          <input
+                            type="number"
+                            min={1}
+                            value={prod.qty}
+                            onChange={(e) => handleProductChange(idx, 'qty', Math.max(1, Number(e.target.value) || 1))}
+                            style={{ width: '65px', padding: '4px 6px', border: '1px solid #cbd5e1', borderRadius: '6px', textAlign: 'center', fontWeight: '600', color: '#1e293b', outline: 'none' }}
+                          />
+                        </td>
+
+                        {/* Price */}
+                        <td style={{ padding: '12px 8px', textAlign: 'right' }}>
+                          <input
+                            type="number"
+                            min={0}
+                            value={prod.price || ''}
+                            onChange={(e) => handleProductChange(idx, 'price', Number(e.target.value) || 0)}
+                            style={{ width: '100px', padding: '4px 6px', border: '1px solid #cbd5e1', borderRadius: '6px', textAlign: 'right', fontWeight: '600', color: '#1e293b', outline: 'none' }}
+                          />
+                        </td>
+
+                        {/* Discount */}
+                        <td style={{ padding: '12px 8px', textAlign: 'right' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                            <input
+                              type="number"
+                              min={0}
+                              placeholder="0"
+                              value={prod.discountValue || ''}
+                              onChange={(e) => handleProductChange(idx, 'discountValue', Number(e.target.value) || 0)}
+                              style={{ width: '65px', padding: '4px 6px', border: '1px solid #cbd5e1', borderRadius: '6px', textAlign: 'right', fontWeight: '600', color: '#1e293b', outline: 'none' }}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleProductChange(idx, 'discountType', prod.discountType === 'fixed' ? 'percentage' : 'fixed')}
+                              style={{
+                                border: '1px solid #cbd5e1',
+                                background: '#f8fafc',
+                                borderRadius: '6px',
+                                padding: '4px 6px',
+                                fontSize: '11px',
+                                fontWeight: '700',
+                                color: '#475569',
+                                cursor: 'pointer',
+                                width: '28px',
+                                textAlign: 'center'
+                              }}
+                            >
+                              {prod.discountType === 'percentage' ? '%' : 'đ'}
+                            </button>
+                          </div>
+                        </td>
+
+                        {/* Total Amount */}
+                        <td style={{ padding: '12px 8px', textAlign: 'right', fontWeight: '700', color: '#1e293b' }}>
+                          {(prod.total || 0).toLocaleString('vi-VN')} đ
+                        </td>
+
+                        {/* Trash */}
+                        <td style={{ padding: '12px 8px', textAlign: 'center' }}>
+                          <button
+                            type="button"
+                            onClick={() => removeProduct(idx)}
+                            style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#ef4444', transition: 'transform 0.15s' }}
+                            onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.15)'}
+                            onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+
+          {/* Configuration & Order Meta Info */}
+          <div style={{ background: '#ffffff', borderRadius: '14px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', overflow: 'hidden' }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid #f1f5f9', background: '#f8fafc', display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{ background: '#f5f3ff', width: '28px', height: '28px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#7c3aed' }}>
+                <Briefcase size={15} />
+              </div>
+              <h2 style={{ fontSize: '15px', fontWeight: '700', color: '#1e293b', margin: 0 }}>Cấu Hình & Phân Loại Hóa Đơn Sỉ</h2>
+            </div>
+            
+            <div style={{ padding: '20px', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
+              
+              {/* Sales Person */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <span style={{ fontSize: '13px', fontWeight: '600', color: '#475569' }}>Nhân viên bán hàng</span>
+                <input 
+                  type="text" 
+                  placeholder="Nhân viên sỉ phụ trách" 
+                  value={form.salesperson} 
+                  onChange={(e) => handleChange('salesperson', e.target.value)} 
+                  style={{ border: '1px solid #cbd5e1', borderRadius: '8px', padding: '10px 12px', outline: 'none', color: '#1e293b', fontSize: '13px' }} 
+                />
+              </div>
+
+              {/* Tech Staff */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <span style={{ fontSize: '13px', fontWeight: '600', color: '#475569' }}>Nhân viên kỹ thuật</span>
+                <input 
+                  type="text" 
+                  placeholder="Nhân viên kỹ thuật (nếu có)" 
+                  value={form.techStaff} 
+                  onChange={(e) => handleChange('techStaff', e.target.value)} 
+                  style={{ border: '1px solid #cbd5e1', borderRadius: '8px', padding: '10px 12px', outline: 'none', color: '#1e293b', fontSize: '13px' }} 
+                />
+              </div>
+
+              {/* Invoice Label */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <span style={{ fontSize: '13px', fontWeight: '600', color: '#475569' }}>Nhãn hóa đơn sỉ</span>
+                <input 
+                  type="text" 
+                  placeholder="Nhãn (ví dụ: Ưu tiên, Đại lý cấp 1...)" 
+                  value={form.wholesaleInvoiceLabel} 
+                  onChange={(e) => handleChange('wholesaleInvoiceLabel', e.target.value)} 
+                  style={{ border: '1px solid #cbd5e1', borderRadius: '8px', padding: '10px 12px', outline: 'none', color: '#1e293b', fontSize: '13px' }} 
+                />
+              </div>
+
+              {/* Order Source */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <span style={{ fontSize: '13px', fontWeight: '600', color: '#475569' }}>Nguồn đơn hàng</span>
+                <select 
+                  value={form.orderSource} 
+                  onChange={(e) => handleChange('orderSource', e.target.value)}
+                  style={{ border: '1px solid #cbd5e1', borderRadius: '8px', padding: '10px 12px', outline: 'none', color: '#1e293b', background: '#ffffff', fontSize: '13px' }}
+                >
+                  <option value="Trực tiếp">Trực tiếp</option>
+                  <option value="Điện thoại">Điện thoại</option>
+                  <option value="Facebook">Facebook</option>
+                  <option value="Zalo">Zalo</option>
+                  <option value="Website">Website</option>
+                  <option value="Khác">Khác</option>
+                </select>
+              </div>
+
+              {/* General Note */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', gridColumn: 'span 2' }}>
+                <span style={{ fontSize: '13px', fontWeight: '600', color: '#475569' }}>Ghi chú hóa đơn</span>
+                <input 
+                  type="text" 
+                  placeholder="Ghi chú thêm về đơn hàng bán sỉ..." 
+                  value={form.description} 
+                  onChange={(e) => handleChange('description', e.target.value)} 
+                  style={{ border: '1px solid #cbd5e1', borderRadius: '8px', padding: '10px 12px', outline: 'none', color: '#1e293b', fontSize: '13px' }} 
+                />
+              </div>
+
+            </div>
+          </div>
+        </div>
+
+        {/* Right Column (30%) - Customer details, VAT, Payment summary */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          
+          {/* Customer Card */}
+          <div style={{ background: '#ffffff', borderRadius: '14px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', overflow: 'hidden' }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid #f1f5f9', background: '#f8fafc', display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{ background: '#e0f2fe', width: '28px', height: '28px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0284c7' }}>
+                <User size={15} />
+              </div>
+              <h2 style={{ fontSize: '15px', fontWeight: '700', color: '#1e293b', margin: 0 }}>Khách Hàng Doanh Nghiệp</h2>
+            </div>
+
+            <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              
+              {/* Phone number & Lookup action */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <span style={{ fontSize: '13px', fontWeight: '600', color: '#475569' }}>Số điện thoại (F4)</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '0 10px', background: '#ffffff' }}>
+                  <Phone size={14} color="#94a3b8" />
+                  <input 
+                    type="text" 
+                    id="customer-phone-input"
+                    placeholder="Nhập SĐT tìm kiếm..." 
+                    value={form.customerPhone} 
+                    onChange={(e) => {
+                      handleChange('customerPhone', e.target.value);
+                      lookupCustomer(e.target.value);
+                    }} 
+                    style={{ border: 'none', background: 'transparent', outline: 'none', padding: '10px 0', width: '100%', color: '#1e293b', fontSize: '13px' }} 
+                  />
+                </div>
+              </div>
+
+              {/* Customer Name & Card Code */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px', gap: '12px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: '600', color: '#475569' }}>Tên khách hàng <span style={{ color: '#ef4444' }}>*</span></span>
+                  <input 
+                    type="text" 
+                    required
+                    placeholder="Tên khách đại lý / sỉ" 
+                    value={form.customerName} 
+                    onChange={(e) => handleChange('customerName', e.target.value)} 
+                    style={{ border: '1px solid #cbd5e1', borderRadius: '8px', padding: '10px 12px', outline: 'none', color: '#1e293b', fontSize: '13px' }} 
+                  />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: '600', color: '#475569' }}>Mã thẻ</span>
+                  <input 
+                    type="text" 
+                    placeholder="Mã đại lý" 
+                    value={form.customerCode} 
+                    onChange={(e) => handleChange('customerCode', e.target.value)} 
+                    style={{ border: '1px solid #cbd5e1', borderRadius: '8px', padding: '10px 12px', outline: 'none', color: '#1e293b', fontSize: '13px' }} 
+                  />
+                </div>
+              </div>
+
+              {/* Email & Date of Birth */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 140px', gap: '12px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: '600', color: '#475569' }}>Email</span>
+                  <input 
+                    type="email" 
+                    placeholder="email@example.com" 
+                    value={form.email} 
+                    onChange={(e) => handleChange('email', e.target.value)} 
+                    style={{ border: '1px solid #cbd5e1', borderRadius: '8px', padding: '10px 12px', outline: 'none', color: '#1e293b', fontSize: '13px' }} 
+                  />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: '600', color: '#475569' }}>Ngày sinh</span>
+                  <input 
+                    type="date" 
+                    value={form.dob} 
+                    onChange={(e) => handleChange('dob', e.target.value)} 
+                    style={{ border: '1px solid #cbd5e1', borderRadius: '8px', padding: '9px 12px', outline: 'none', color: '#1e293b', fontSize: '13px' }} 
+                  />
+                </div>
+              </div>
+
+              {/* Region & Detail Address */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <span style={{ fontSize: '13px', fontWeight: '600', color: '#475569' }}>Tỉnh/Thành phố, Quận/Huyện, Phường/Xã</span>
+                <input 
+                  type="text" 
+                  placeholder="Tỉnh/Thành phố, Phường/Xã" 
+                  value={form.addressLocation} 
+                  onChange={(e) => handleChange('addressLocation', e.target.value)} 
+                  style={{ border: '1px solid #cbd5e1', borderRadius: '8px', padding: '10px 12px', outline: 'none', color: '#1e293b', fontSize: '13px' }} 
+                />
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <span style={{ fontSize: '13px', fontWeight: '600', color: '#475569' }}>Địa chỉ cụ thể</span>
+                <input 
+                  type="text" 
+                  placeholder="Số nhà, tên đường..." 
+                  value={form.address} 
+                  onChange={(e) => handleChange('address', e.target.value)} 
+                  style={{ border: '1px solid #cbd5e1', borderRadius: '8px', padding: '10px 12px', outline: 'none', color: '#1e293b', fontSize: '13px' }} 
+                />
+              </div>
+
+              {/* Company Info for Wholesale Enterprises */}
+              <div style={{ borderTop: '1px dashed #e2e8f0', marginTop: '10px', paddingTop: '14px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <span style={{ fontSize: '13px', fontWeight: '700', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Building size={14} color="#7c3aed" /> Thông tin doanh nghiệp sỉ
+                </span>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <span style={{ fontSize: '12px', fontWeight: '600', color: '#475569' }}>Tên công ty</span>
+                  <input 
+                    type="text" 
+                    placeholder="Tên công ty xuất hóa đơn" 
+                    value={form.companyName} 
+                    onChange={(e) => handleChange('companyName', e.target.value)} 
+                    style={{ border: '1px solid #cbd5e1', borderRadius: '8px', padding: '10px 12px', outline: 'none', color: '#1e293b', fontSize: '13px' }} 
+                  />
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <span style={{ fontSize: '12px', fontWeight: '600', color: '#475569' }}>Mã số thuế</span>
+                  <input 
+                    type="text" 
+                    placeholder="Mã số thuế công ty sỉ" 
+                    value={form.taxId} 
+                    onChange={(e) => handleChange('taxId', e.target.value)} 
+                    style={{ border: '1px solid #cbd5e1', borderRadius: '8px', padding: '10px 12px', outline: 'none', color: '#1e293b', fontSize: '13px' }} 
+                  />
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: '600', color: '#475569' }}>Số PO - Hợp đồng</span>
+                    <input 
+                      type="text" 
+                      placeholder="Số hợp đồng PO" 
+                      value={form.poContractNumber} 
+                      onChange={(e) => handleChange('poContractNumber', e.target.value)} 
+                      style={{ border: '1px solid #cbd5e1', borderRadius: '8px', padding: '10px 12px', outline: 'none', color: '#1e293b', fontSize: '13px' }} 
+                    />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: '600', color: '#475569' }}>Ngày ký hợp đồng</span>
+                    <input 
+                      type="date" 
+                      value={form.contractSigningDate} 
+                      onChange={(e) => handleChange('contractSigningDate', e.target.value)} 
+                      style={{ border: '1px solid #cbd5e1', borderRadius: '8px', padding: '9px 12px', outline: 'none', color: '#1e293b', fontSize: '13px' }} 
+                    />
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          {/* VAT Invoice Details Card */}
+          <div style={{ background: '#ffffff', borderRadius: '14px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', overflow: 'hidden' }}>
+            <div style={{ padding: '14px 20px', borderBottom: '1px solid #f1f5f9', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ background: '#fef3c7', width: '28px', height: '28px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#d97706' }}>
+                  <FileText size={15} />
+                </div>
+                <h2 style={{ fontSize: '15px', fontWeight: '700', color: '#1e293b', margin: 0 }}>Hóa đơn VAT</h2>
+              </div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '700', color: '#6d28d9' }}>
+                <input
+                  type="checkbox"
+                  checked={form.hasVat}
+                  onChange={(e) => handleChange('hasVat', e.target.checked)}
+                  style={{ width: '15px', height: '15px', cursor: 'pointer' }}
+                />
+                Xuất hóa đơn
+              </label>
+            </div>
+
+            {form.hasVat && (
+              <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px', background: '#fffbeb' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <span style={{ fontSize: '12px', fontWeight: '600', color: '#475569' }}>Số hóa đơn VAT</span>
+                  <input 
+                    type="text" 
+                    placeholder="Số hóa đơn VAT đỏ" 
+                    value={form.vatInvoiceNumber} 
+                    onChange={(e) => handleChange('vatInvoiceNumber', e.target.value)} 
+                    style={{ border: '1px solid #cbd5e1', borderRadius: '8px', padding: '10px 12px', outline: 'none', color: '#1e293b', fontSize: '13px', background: '#ffffff' }} 
+                  />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <span style={{ fontSize: '12px', fontWeight: '600', color: '#475569' }}>Ngày xuất hóa đơn</span>
+                  <input 
+                    type="date" 
+                    value={form.vatInvoiceDate} 
+                    onChange={(e) => handleChange('vatInvoiceDate', e.target.value)} 
+                    style={{ border: '1px solid #cbd5e1', borderRadius: '8px', padding: '9px 12px', outline: 'none', color: '#1e293b', fontSize: '13px', background: '#ffffff' }} 
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Payment Sum, Multi-Method & Debt Card */}
+          <div style={{ background: '#ffffff', borderRadius: '14px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03)', overflow: 'hidden' }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid #f1f5f9', background: '#f8fafc', display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{ background: '#fee2e2', width: '28px', height: '28px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ef4444' }}>
+                <CreditCard size={15} />
+              </div>
+              <h2 style={{ fontSize: '15px', fontWeight: '700', color: '#1e293b', margin: 0 }}>Thanh Toán & Công Nợ Sỉ</h2>
+            </div>
+
+            <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              
+              {/* Order discount, VAT% and auto checkbox */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', paddingBottom: '14px', borderBottom: '1px solid #f1f5f9' }}>
+                
+                {/* Auto discount toggle */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Bỏ chiết khấu tự động</span>
+                  <input
+                    type="checkbox"
+                    checked={!form.autoDiscount}
+                    onChange={(e) => handleChange('autoDiscount', !e.target.checked)}
+                    style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                  />
+                </div>
+
+                {/* Subtotal */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#64748b' }}>
+                  <span>Tạm tính sỉ (chưa chiết khấu đơn):</span>
+                  <span style={{ fontWeight: '700', color: '#1e293b' }}>
+                    {products.reduce((acc, p) => acc + (p.price * p.qty), 0).toLocaleString('vi-VN')} đ
+                  </span>
+                </div>
+
+                {/* Order Discount Input */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '13px', color: '#64748b' }}>Chiết khấu đơn (đ):</span>
+                  <input 
+                    type="number" 
+                    min={0}
+                    value={form.orderDiscount || ''}
+                    onChange={(e) => handleChange('orderDiscount', Number(e.target.value) || 0)}
+                    style={{ width: '130px', padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', textAlign: 'right', fontSize: '13px', fontWeight: '600', outline: 'none' }}
+                  />
+                </div>
+
+                {/* VAT Percent Input */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '13px', color: '#64748b' }}>Thuế VAT (%):</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <input 
+                      type="number" 
+                      min={0}
+                      max={100}
+                      disabled={!form.hasVat}
+                      value={form.vatPercent}
+                      onChange={(e) => handleChange('vatPercent', Number(e.target.value) || 0)}
+                      style={{ width: '70px', padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', textAlign: 'right', fontSize: '13px', fontWeight: '600', outline: 'none', background: form.hasVat ? '#ffffff' : '#f1f5f9' }}
+                    />
+                    <Percent size={13} color="#64748b" />
+                  </div>
+                </div>
+
+              </div>
+
+              {/* Split Payment inputs to match "Khách thanh toán" */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', paddingBottom: '14px', borderBottom: '1px solid #f1f5f9' }}>
+                <span style={{ fontSize: '13px', fontWeight: '700', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Coins size={14} color="#059669" /> Chi tiết khách thanh toán sỉ
+                </span>
+
+                {/* Cash */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '13px', color: '#475569' }}>Tiền mặt (đ):</span>
+                  <input 
+                    type="number" 
+                    min={0}
+                    placeholder="0"
+                    value={form.paymentCash || ''}
+                    onChange={(e) => handleChange('paymentCash', Number(e.target.value) || 0)}
+                    style={{ width: '150px', padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', textAlign: 'right', fontSize: '13px', fontWeight: '600', outline: 'none' }}
+                  />
+                </div>
+
+                {/* Transfer */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '13px', color: '#475569' }}>Chuyển khoản (đ):</span>
+                  <input 
+                    type="number" 
+                    min={0}
+                    placeholder="0"
+                    value={form.paymentTransfer || ''}
+                    onChange={(e) => handleChange('paymentTransfer', Number(e.target.value) || 0)}
+                    style={{ width: '150px', padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', textAlign: 'right', fontSize: '13px', fontWeight: '600', outline: 'none' }}
+                  />
+                </div>
+
+                {/* Card */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '13px', color: '#475569' }}>Quẹt thẻ (đ):</span>
+                  <input 
+                    type="number" 
+                    min={0}
+                    placeholder="0"
+                    value={form.paymentCard || ''}
+                    onChange={(e) => handleChange('paymentCard', Number(e.target.value) || 0)}
+                    style={{ width: '150px', padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', textAlign: 'right', fontSize: '13px', fontWeight: '600', outline: 'none' }}
+                  />
+                </div>
+
+                {/* Other */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '13px', color: '#475569' }}>Khác (đ):</span>
+                  <input 
+                    type="number" 
+                    min={0}
+                    placeholder="0"
+                    value={form.paymentOther || ''}
+                    onChange={(e) => handleChange('paymentOther', Number(e.target.value) || 0)}
+                    style={{ width: '150px', padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', textAlign: 'right', fontSize: '13px', fontWeight: '600', outline: 'none' }}
+                  />
+                </div>
+
+                {/* Prepaid From Order */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '13px', color: '#475569', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                    Đã thanh toán từ đơn hàng (đ):
+                  </span>
+                  <input 
+                    type="number" 
+                    min={0}
+                    placeholder="0"
+                    value={form.prepaidFromOrder || ''}
+                    onChange={(e) => handleChange('prepaidFromOrder', Number(e.target.value) || 0)}
+                    style={{ width: '150px', padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', textAlign: 'right', fontSize: '13px', fontWeight: '600', outline: 'none' }}
+                  />
+                </div>
+
+              </div>
+
+              {/* Total Paid & Debt Outputs */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                
+                {/* Total amount payable */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '14px', fontWeight: '700', color: '#1e293b' }}>Tổng tiền phải thanh toán:</span>
+                  <span style={{ fontSize: '18px', fontWeight: '800', color: '#7c3aed' }}>
+                    {form.totalAmount.toLocaleString('vi-VN')} đ
+                  </span>
+                </div>
+
+                {/* Remaining Debt */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '14px', fontWeight: '700', color: '#1e293b' }}>Công nợ khách còn nợ sỉ:</span>
+                  <span style={{ fontSize: '18px', fontWeight: '800', color: form.debtAmount > 0 ? '#e11d48' : '#059669' }}>
+                    {form.debtAmount.toLocaleString('vi-VN')} đ
+                  </span>
+                </div>
+
+                {/* Status Indicator Tag */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px' }}>
+                  <span style={{ fontSize: '12px', color: '#64748b', fontWeight: '600' }}>Trạng thái thanh toán sỉ:</span>
+                  <span style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: '700', background: form.status === 'Còn nợ' ? '#fff1f2' : '#ecfdf5', color: form.status === 'Còn nợ' ? '#e11d48' : '#047857' }}>
+                    {form.status}
+                  </span>
+                </div>
+
+              </div>
+
+              {/* Auto print checkbox and Save action */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '10px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '600', color: '#475569' }}>
+                  <input
+                    type="checkbox"
+                    checked={form.autoPrint}
+                    onChange={(e) => handleChange('autoPrint', e.target.checked)}
+                    style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                  />
+                  Tự động in sau khi lưu hóa đơn (F10)
+                </label>
+
+                <button 
+                  type="submit"
+                  disabled={isSaving}
+                  style={{ 
+                    width: '100%',
+                    borderRadius: '10px', 
+                    padding: '12px 24px', 
+                    fontSize: '15px', 
+                    fontWeight: '700', 
+                    background: 'linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)', 
+                    color: '#ffffff',
+                    border: 'none', 
+                    boxShadow: '0 4px 14px rgba(124, 58, 237, 0.3)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    cursor: isSaving ? 'not-allowed' : 'pointer',
+                    opacity: isSaving ? 0.7 : 1
+                  }}
+                >
+                  <Save size={18} />
+                  {isSaving ? 'Đang lưu hóa đơn sỉ...' : 'Xác nhận & Lưu sỉ'}
+                </button>
+              </div>
+
+            </div>
+          </div>
+
+        </div>
+
+      </form>
+    </div>
+  );
+}
+

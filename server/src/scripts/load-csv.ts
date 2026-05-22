@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import csv from 'csv-parser';
 import { connectDatabase } from '../config/database.js';
-import { Product, RetailInvoice } from '../modules/product/product.models.js';
+import { Product, RetailInvoice, WholesaleInvoice, RefundInvoice } from '../modules/product/product.models.js';
 import { InventoryVoucher, InventoryProduct, WarehouseTransfer } from '../modules/warehouse/warehouse.models.js';
 
 function parseCsvFile<T>(filePath: string, mapper: (data: any) => T | null, separator = ';'): Promise<T[]> {
@@ -319,7 +319,7 @@ async function runMigration() {
                         }
                     };
 
-                    if (row.totalAmount > 0) {
+                    if ('totalAmount' in row && row.totalAmount && row.totalAmount > 0) {
                         updateObj.$set.totalAmount = row.totalAmount;
                     }
 
@@ -341,7 +341,261 @@ async function runMigration() {
             }
         }
 
+        // 6. Load Bán sỉ (Wholesale Invoices)
+        console.log('🧹 Xoá dữ liệu cũ của bảng WholesaleInvoice...');
+        await WholesaleInvoice.deleteMany({});
+        console.log('✅ Đã dọn sạch collection wholesaleinvoices.');
+
+        const wholesaleFiles = [
+            { name: 'Hóa đơn bán sỉ.csv', tab: 'wholesale' },
+            { name: 'Có chiết khấu.csv', tab: 'discount' },
+            { name: 'Có công nợ.csv', tab: 'debt' }
+        ];
+
+        let totalWholesaleRecordsLoaded = 0;
+
+        for (const fileInfo of wholesaleFiles) {
+            const filePath = path.resolve(process.cwd(), `../Bảng dữ liệu/${fileInfo.name}`);
+            if (fs.existsSync(filePath)) {
+                console.log(`⏳ Đang đọc file CSV bán sỉ: ${fileInfo.name}`);
+                
+                const rows = await parseCsvFile(filePath, (data) => {
+                    const id = data['ID']?.trim();
+                    if (!id) return null;
+                    return {
+                        id,
+                        date: data['Ngày'] || '',
+                        cashier: data['Nhân viên thu ngân'] || '',
+                        salesperson: data['Nhân viên bán hàng'] || '',
+                        type: data['Kiểu'] || '',
+                        warehouse: data['Kho'] || '',
+                        customerName: data['Tên khách hàng'] || '',
+                        customerCode: data['Mã khách hàng'] || '',
+                        customerPhone: data['Số điện thoại khách hàng'] || '',
+                        otherInfo: data['Thông tin khác'] || '',
+                        productName: data['Tên sản phẩm'] || '',
+                        gift: data['Quà tặng'] || '',
+                        productCode: data['Mã sản phẩm'] || '',
+                        barcode: data['Mã vạch'] || '',
+                        price: parseInt(data['Giá bán'], 10) || 0,
+                        unit: data['Đơn vị tính'] || '',
+                        imei: data['IMEI'] || '',
+                        cost: parseInt(data['Giá vốn'], 10) || 0,
+                        quantity: parseInt(data['Số lượng'], 10) || 0,
+                        vatAmount: parseInt(data['VAT'], 10) || 0,
+                        vatPercent: parseInt(data['% VAT'], 10) || 0,
+                        vatType: data['Loại vat'] || '',
+                        productNote: data['Ghi chú sản phẩm'] || '',
+                        subtotalBeforeDiscount: parseInt(data['Thành tiền (Chưa CK)'], 10) || 0,
+                        subtotalAfterDiscount: parseInt(data['Thành tiền (SCK)'], 10) || 0,
+                        profit: parseInt(data['Lợi nhuận'], 10) || 0,
+                        productDiscount: parseInt(data['Chiết khấu theo sản phẩm'], 10) || 0,
+                        productDiscountPercent: parseInt(data['Chiết khấu theo phần trăm'], 10) || 0,
+                        totalProducts: parseInt(data['Tổng sản phẩm'], 10) || 0,
+                        totalBeforeDiscount: parseInt(data['Tổng tiền (Chưa cK)'], 10) || 0,
+                        totalAmount: parseInt(data['Tổng tiền phải TT'], 10) || 0,
+                        paidAmount: parseInt(data['Đã TT'], 10) || 0,
+                        orderDiscount: parseInt(data['Chiết khấu theo đơn'], 10) || 0,
+                        debtAmount: parseInt(data['Chưa TT'], 10) || 0,
+                        description: data['Mô tả'] || '',
+                        wholesaleInvoiceLabel: data['Nhãn hóa đơn bán sỉ'] || '',
+                        status: data['Chưa TT'] && parseInt(data['Chưa TT'], 10) > 0 ? 'Còn nợ' : 'Đã thanh toán',
+                    };
+                });
+
+                if (rows.length > 0) {
+                    console.log(`💾 Đang upsert ${rows.length} records từ file ${fileInfo.name}...`);
+                    for (const row of rows) {
+                        const updateObj: any = {
+                            $set: {
+                                ...row
+                            },
+                            $addToSet: {
+                                tabs: fileInfo.tab
+                            }
+                        };
+                        delete updateObj.$set.id;
+
+                        await WholesaleInvoice.findOneAndUpdate(
+                            { id: row.id },
+                            updateObj,
+                            { upsert: true, new: true }
+                        );
+                        totalWholesaleRecordsLoaded++;
+                    }
+                    console.log(`✅ Hoàn tất file ${fileInfo.name}.`);
+                } else {
+                    console.log(`ℹ️ File ${fileInfo.name} chỉ có tiêu đề, không có dữ liệu để nạp.`);
+                }
+            } else {
+                console.warn(`⚠️ Bỏ qua nạp file do không tìm thấy: ${filePath}`);
+            }
+        }
+
+        // Seeding dữ liệu mẫu nếu không tải được bản ghi nào từ các file CSV
+        if (totalWholesaleRecordsLoaded === 0) {
+            console.log('🌱 Không tìm thấy dữ liệu trong file CSV. Tiến hành Seeding dữ liệu mẫu bán sỉ...');
+            const mockWholesaleInvoices = [
+                {
+                    id: 'HDSI-10001',
+                    tabs: ['wholesale'],
+                    date: new Date().toLocaleString('vi-VN'),
+                    cashier: 'Lê Sỹ Bách',
+                    salesperson: 'Trần Văn Hoàng',
+                    type: 'Xuất bán sỉ [S]',
+                    warehouse: 'Kho Hà Nội',
+                    customerName: 'Đại lý Mỹ phẩm Hoa Mai',
+                    customerCode: 'DL-HOAMAI',
+                    customerPhone: '0987654321',
+                    productName: 'Kem dưỡng da LadyStars Premium',
+                    productCode: 'LD-PREMIUM-01',
+                    price: 500000,
+                    unit: 'Hộp',
+                    cost: 300000,
+                    quantity: 20,
+                    subtotalBeforeDiscount: 10000000,
+                    subtotalAfterDiscount: 10000000,
+                    totalProducts: 20,
+                    totalBeforeDiscount: 10000000,
+                    totalAmount: 10000000,
+                    paidAmount: 10000000,
+                    debtAmount: 0,
+                    status: 'Đã thanh toán',
+                    wholesaleInvoiceLabel: 'Bán sỉ thường'
+                },
+                {
+                    id: 'HDSI-10002',
+                    tabs: ['wholesale', 'discount'],
+                    date: new Date().toLocaleString('vi-VN'),
+                    cashier: 'Lê Sỹ Bách',
+                    salesperson: 'Nguyễn Thị Hương',
+                    type: 'Xuất bán sỉ [S]',
+                    warehouse: 'Kho HCM',
+                    customerName: 'Spa & Beauty Quỳnh Anh',
+                    customerCode: 'SPA-QA',
+                    customerPhone: '0912345678',
+                    productName: 'Serum phục hồi LadyStars Gold',
+                    productCode: 'LD-SERUM-G',
+                    price: 800000,
+                    unit: 'Chai',
+                    cost: 450000,
+                    quantity: 15,
+                    subtotalBeforeDiscount: 12000000,
+                    subtotalAfterDiscount: 10800000,
+                    productDiscount: 1200000,
+                    productDiscountPercent: 10,
+                    totalProducts: 15,
+                    totalBeforeDiscount: 12000000,
+                    totalAmount: 10800000,
+                    paidAmount: 10800000,
+                    debtAmount: 0,
+                    status: 'Đã thanh toán',
+                    wholesaleInvoiceLabel: 'Bán sỉ chiết khấu'
+                },
+                {
+                    id: 'HDSI-10003',
+                    tabs: ['wholesale', 'debt'],
+                    date: new Date().toLocaleString('vi-VN'),
+                    cashier: 'Lê Sỹ Bách',
+                    salesperson: 'Trần Văn Hoàng',
+                    type: 'Xuất bán sỉ [S]',
+                    warehouse: 'Kho Hà Nội',
+                    customerName: 'Hệ thống Salon tóc Hùng Dũng',
+                    customerCode: 'SALON-HD',
+                    customerPhone: '0909998887',
+                    productName: 'Dầu gội thảo dược LadyStars Organic',
+                    productCode: 'LD-SHAMPOO-O',
+                    price: 250000,
+                    unit: 'Chai',
+                    cost: 150000,
+                    quantity: 40,
+                    subtotalBeforeDiscount: 10000000,
+                    subtotalAfterDiscount: 10000000,
+                    totalProducts: 40,
+                    totalBeforeDiscount: 10000000,
+                    totalAmount: 10000000,
+                    paidAmount: 4000000,
+                    debtAmount: 6000000,
+                    status: 'Còn nợ',
+                    wholesaleInvoiceLabel: 'Bán sỉ công nợ'
+                }
+            ];
+            await WholesaleInvoice.insertMany(mockWholesaleInvoices);
+            console.log('✅ Đã nạp thành công 3 hóa đơn bán sỉ mẫu.');
+        }
+
+        // 7. Load Trả hàng (Refund Invoices)
+        console.log('🧹 Xoá dữ liệu cũ của bảng RefundInvoice...');
+        await RefundInvoice.deleteMany({});
+        console.log('✅ Đã dọn sạch collection refundinvoices.');
+
+        const refundPath = path.resolve(process.cwd(), '../Bảng dữ liệu/Nhanh.vn_Product_Retain_Return_2026-05-22_152444.csv');
+        if (fs.existsSync(refundPath)) {
+            console.log(`⏳ Đang đọc file CSV trả hàng: ${refundPath}`);
+            const refundRows = await parseCsvFile(refundPath, (data) => {
+                const id = data['ID']?.trim();
+                if (!id) return null;
+                return {
+                    id,
+                    date: data['Ngày'] || '',
+                    returnOrderId: data['ID đơn trả'] || '',
+                    receiver: data['Nhân viên nhận trả hàng'] || '',
+                    salesAccount: data['Tài khoản NVBH'] || '',
+                    salesperson: data['Nhân viên bán hàng'] || '',
+                    cashier: data['Nhân viên thu ngân'] || '',
+                    type: data['Kiểu'] || '',
+                    warehouse: data['Kho'] || '',
+                    customerName: data['Tên khách hàng'] || '',
+                    customerPhone: data['SĐT Khách hàng'] || '',
+                    email: data['Email'] || '',
+                    address: data['Địa chỉ'] || '',
+                    gender: data['Giới tính'] || '',
+                    parentProductCode: data['Mã sản phẩm cha'] || '',
+                    parentProductName: data['Tên sản phẩm cha'] || '',
+                    productCode: data['Mã sản phẩm'] || '',
+                    productName: data['Tên sản phẩm'] || '',
+                    unit: data['Đơn vị tính'] || '',
+                    imei: data['IMEI'] || '',
+                    batch: data['Lô hàng'] || '',
+                    brand: data['Thương hiệu'] || '',
+                    price: parseInt(data['Giá bán'], 10) || 0,
+                    cost: parseInt(data['Giá vốn'], 10) || 0,
+                    quantity: parseInt(data['Số lượng'], 10) || 0,
+                    vat: parseInt(data['VAT'], 10) || 0,
+                    gift: data['Quà tặng'] || '',
+                    giftCost: parseInt(data['Giá vốn quà tặng'], 10) || 0,
+                    extendedWarrantyName: data['Tên gói BHMR'] || '',
+                    extendedWarrantyFee: parseInt(data['Tiền BHMR'], 10) || 0,
+                    revenue: parseInt(data['Doanh thu'], 10) || 0,
+                    refundAmount: parseInt(data['Trả lại'], 10) || 0,
+                    refundFee: parseInt(data['Phí trả hàng'], 10) || 0,
+                    cash: parseInt(data['Tiền mặt'], 10) || 0,
+                    transfer: parseInt(data['Chuyển khoản'], 10) || 0,
+                    totalAmount: parseInt(data['Tổng tiền'], 10) || 0,
+                    discount: parseInt(data['Chiết khấu'], 10) || 0,
+                    description: data['Mô tả'] || '',
+                    returnFromInvoice: data['Trả hàng từ hóa đơn'] || '',
+                    returnFromOrder: data['Trả hàng từ đơn hàng'] || '',
+                    profit: parseInt(data['Lợi nhuận'], 10) || 0,
+                    accumulatedPoints: parseInt(data['Điểm tích lũy từ hóa đơn'], 10) || 0,
+                    salesCommission: parseInt(data['Hoa hồng bán hàng'], 10) || 0,
+                };
+            });
+            if (refundRows.length > 0) {
+                console.log(`💾 Đang upsert ${refundRows.length} records trả hàng...`);
+                for (const row of refundRows) {
+                    const updateObj: any = { $set: row };
+                    delete updateObj.$set.id;
+                    await RefundInvoice.findOneAndUpdate({ id: row.id }, updateObj, { upsert: true, new: true });
+                }
+                console.log(`✅ Hoàn tất nạp dữ liệu trả hàng.`);
+            }
+        } else {
+            console.warn(`⚠️ Bỏ qua nạp file do không tìm thấy: ${refundPath}`);
+        }
+
         process.exit(0);
+
 
     } catch (error) {
         console.error('❌ CÓ LỖI XẢY RA TRONG QUÁ TRÌNH MIGRATION:', error);

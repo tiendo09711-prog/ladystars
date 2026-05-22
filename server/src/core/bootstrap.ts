@@ -19,6 +19,17 @@ import {
 import { Project, Task } from '../modules/task/task.models.js';
 import { Vendor, VendorGroup, VendorPurchase, VendorRefund, VendorTransfer } from '../modules/vendor/vendor.models.js';
 import { PrintForm } from '../modules/printForms/printForms.models.js';
+import {
+  Order,
+  OrderDuplicate,
+  OrderPackaging,
+  OrderHandover,
+  OrderShippingPending,
+  OrderDispute,
+  OrderCodControl,
+  OrderSource,
+  OrderHistory,
+} from '../modules/orders/orders.models.js';
 
 async function backfillOwnerField(model: Model<any>, field: string, ownerId: unknown) {
   if (!model.schema.path(field)) return;
@@ -48,6 +59,8 @@ export async function bootstrapSystem() {
     SaleChannel, DeliveryPartner, PaymentMethod, Customer, CustomerGroup,
     Vendor, VendorGroup, VendorPurchase, VendorRefund, VendorTransfer,
     AccountingType, Receipt, ExpensePayment, PayPerson, Project, Task, PrintForm,
+    Order, OrderDuplicate, OrderPackaging, OrderHandover, OrderShippingPending,
+    OrderDispute, OrderCodControl, OrderSource, OrderHistory,
   ];
 
   for (const model of models) {
@@ -63,4 +76,5 @@ export async function bootstrapSystem() {
     { $or: [{ status: { $exists: false } }, { status: null }, { status: '' }] },
     { $set: { status: 'Mới' } },
   );
+
 }

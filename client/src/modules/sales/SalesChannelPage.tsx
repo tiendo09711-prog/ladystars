@@ -12,7 +12,6 @@ const CHANNEL_META: Record<string, { label: string; icon: React.ReactNode; color
   tiki:         { label: 'Tiki',                icon: <ShoppingCart size={28} />,color: '#0284c7', bg: '#f0f9ff' },
   facebook:     { label: 'Facebook Shop',       icon: <Facebook size={28} />,    color: '#1d4ed8', bg: '#eff6ff' },
   'ecom-finance':{ label: 'Tài chính sàn TMDT', icon: <WalletCards size={28} />,color: '#059669', bg: '#ecfdf5' },
-  einvoice:     { label: 'Hóa đơn điện tử',    icon: <FileText size={28} />,    color: '#b45309', bg: '#fffbeb' },
 };
 
 const ACTIONS = [
@@ -41,28 +40,12 @@ const ACTIONS = [
     bg: '#f5f3ff',
   },
   {
-    key: 'einvoice',
-    label: 'Hóa đơn điện tử',
-    desc: 'Xuất và quản lý hóa đơn điện tử VAT',
-    icon: <FileText size={26} />,
-    color: '#b45309',
-    bg: '#fffbeb',
-  },
-  {
     key: 'refund',
     label: 'Trả hàng',
     desc: 'Xử lý đơn trả hàng, hoàn tiền khách hàng',
     icon: <RotateCcw size={26} />,
     color: '#dc2626',
     bg: '#fef2f2',
-  },
-  {
-    key: 'gift-debt',
-    label: 'Nợ quà tặng',
-    desc: 'Quản lý các khoản nợ quà, khuyến mãi chưa hoàn thành',
-    icon: <Gift size={26} />,
-    color: '#db2777',
-    bg: '#fdf2f8',
   },
 ];
 

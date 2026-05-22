@@ -330,7 +330,7 @@ export function DataModulePage({
                 )}
               </div>
             ) : (
-              <button className="btn btn-primary full" type="button" onClick={openCreate}>
+              <button className="btn btn-primary full" type="button" onClick={onPrimaryActionClick ? onPrimaryActionClick : openCreate}>
                 <Plus size={16} /> Tạo mới
               </button>
             )}

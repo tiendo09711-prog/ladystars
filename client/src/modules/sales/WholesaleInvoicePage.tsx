@@ -1,14 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileSpreadsheet, WalletCards, Warehouse, MapPin, Phone, X, ArrowRight, Check } from 'lucide-react';
+import { FileSpreadsheet, Percent, WalletCards, Warehouse, MapPin, Phone, X, ArrowRight, Check } from 'lucide-react';
 import { TabbedModulePage } from '../../core/components/TabbedModulePage';
 import { http } from '../../core/api/http';
 
-type RetailInvoicePageProps = {
+type WholesaleInvoicePageProps = {
   channel: string;
 };
 
-export function RetailInvoicePage({ channel }: RetailInvoicePageProps) {
+export function WholesaleInvoicePage({ channel }: WholesaleInvoicePageProps) {
   const [showBranchModal, setShowBranchModal] = useState(false);
   const [branches, setBranches] = useState<any[]>([]);
   const [selectedBranchId, setSelectedBranchId] = useState('');
@@ -44,7 +44,7 @@ export function RetailInvoicePage({ channel }: RetailInvoicePageProps) {
   const handleConfirmBranch = () => {
     if (!selectedBranchId) return;
     setShowBranchModal(false);
-    navigate(`/sales-channels/${channel}/retail/create?branchId=${selectedBranchId}`);
+    navigate(`/sales-channels/${channel}/wholesale/create?branchId=${selectedBranchId}`);
   };
 
   return (
@@ -52,149 +52,130 @@ export function RetailInvoicePage({ channel }: RetailInvoicePageProps) {
       <TabbedModulePage
         tabs={[
           {
-            key: 'all',
-            label: 'Tất cả',
-            title: 'Hóa đơn bán lẻ - Tất cả',
-            subtitle: 'Danh sách tất cả hóa đơn bán lẻ',
-            endpoint: '/products/retail-invoices?tabs=all',
+            key: 'wholesale',
+            label: 'Hóa đơn bán sỉ',
+            title: 'Hóa đơn bán sỉ',
+            subtitle: 'Danh sách hóa đơn bán sỉ của doanh nghiệp',
+            endpoint: '/products/wholesale-invoices?tabs=wholesale',
             icon: <FileSpreadsheet size={24} />,
-            primaryActionLabel: 'Thêm hóa đơn lẻ',
+            primaryActionLabel: 'Tạo hóa đơn sỉ',
             onPrimaryActionClick: () => setShowBranchModal(true),
             fields: [
               { key: 'date', label: 'Ngày' },
-              { key: 'id', label: 'ID' },
-              { key: 'orderId', label: 'ID đơn hàng' },
-              { key: 'type', label: 'Kiểu' },
+              { key: 'id', label: 'ID Hóa đơn' },
+              { key: 'warehouse', label: 'Kho xuất' },
               { key: 'customerName', label: 'Khách hàng' },
               { key: 'productCode', label: 'Mã sản phẩm' },
               { key: 'productName', label: 'Tên sản phẩm' },
-              { key: 'totalAmount', label: 'Tổng tiền', type: 'money' },
+              { key: 'totalAmount', label: 'Tổng tiền phải TT', type: 'money' },
+              { key: 'paidAmount', label: 'Đã TT', type: 'money' },
               { key: 'status', label: 'Trạng thái', type: 'status' },
             ],
             formFields: [
               { key: 'id', label: 'ID Hóa đơn', required: true },
-              { key: 'date', label: 'Ngày (dd/mm/yyyy hh:mm:ss)', required: true },
-              { key: 'orderId', label: 'ID đơn hàng' },
-              { key: 'type', label: 'Kiểu', required: true },
-              { key: 'salesperson', label: 'Nhân viên bán hàng' },
-              { key: 'techStaff', label: 'Nhân viên kỹ thuật' },
-              { key: 'phone', label: 'Số điện thoại' },
+              { key: 'date', label: 'Ngày lập (dd/mm/yyyy)', required: true },
+              { key: 'warehouse', label: 'Kho hàng' },
               { key: 'customerName', label: 'Tên khách hàng', required: true },
-              { key: 'email', label: 'Email', type: 'email' },
-              { key: 'facebook', label: 'Facebook' },
-              { key: 'dob', label: 'Ngày sinh', type: 'date' },
-              { key: 'addressLocation', label: 'Tỉnh/Thành phố, Quận/Huyện, Phường/Xã' },
-              { key: 'address', label: 'Địa chỉ' },
-              { key: 'cardId', label: 'Mã thẻ' },
-              { key: 'customerLevel', label: 'Cấp độ khách hàng' },
-              { key: 'companyName', label: 'Tên công ty' },
-              { key: 'taxId', label: 'Mã số thuế' },
-              { key: 'companyAddress', label: 'Địa chỉ công ty' },
-              { key: 'orderSource', label: 'Nguồn đơn hàng' },
+              { key: 'customerPhone', label: 'Số điện thoại' },
               { key: 'productCode', label: 'Mã sản phẩm', required: true },
               { key: 'productName', label: 'Tên sản phẩm', required: true },
-              { key: 'discount', label: 'Chiết khấu', type: 'number' },
-              { key: 'vat', label: 'VAT (%)', type: 'number' },
-              { key: 'coupon', label: 'Coupon' },
-              { key: 'totalAmount', label: 'Tổng tiền', type: 'number', required: true },
-              {
-                key: 'paymentMethod',
-                label: 'Khách thanh toán',
-                type: 'select',
-                options: [
-                  { label: 'Tiền mặt', value: 'Tiền mặt' },
-                  { label: 'Chuyển khoản', value: 'Chuyển khoản' },
-                  { label: 'Quẹt thẻ', value: 'Quẹt thẻ' },
-                  { label: 'Khác', value: 'Khác' },
-                ],
-              },
-              { key: 'note', label: 'Ghi chú', type: 'textarea' },
-              {
-                key: 'status',
-                label: 'Trạng thái',
-                type: 'select',
-                options: [
-                  { label: 'Mới', value: 'Mới' },
-                  { label: 'Đã thanh toán', value: 'Đã thanh toán' },
-                  { label: 'Đã hủy', value: 'Đã hủy' },
-                ],
-              },
+              { key: 'price', label: 'Đơn giá', type: 'number' },
+              { key: 'quantity', label: 'Số lượng', type: 'number' },
+              { key: 'totalAmount', label: 'Tổng tiền phải TT', type: 'number' },
+              { key: 'paidAmount', label: 'Đã TT', type: 'number' },
+              { key: 'wholesaleInvoiceLabel', label: 'Nhãn hóa đơn' },
             ],
             createDefaults: {
               id: '',
-              tabs: ['all'],
-              date: new Date().toLocaleString('vi-VN'),
-              orderId: '',
-              type: 'Xuất bán lẻ [L]',
-              salesperson: '',
-              techStaff: '',
-              phone: '',
+              tabs: ['wholesale'],
+              date: new Date().toLocaleDateString('vi-VN'),
+              warehouse: '',
               customerName: '',
-              email: '',
-              facebook: '',
-              dob: '',
-              addressLocation: '',
-              address: '',
-              cardId: '',
-              customerLevel: '',
-              companyName: '',
-              taxId: '',
-              companyAddress: '',
-              orderSource: '',
+              customerPhone: '',
               productCode: '',
               productName: '',
-              discount: 0,
-              vat: 0,
-              coupon: '',
-              paymentMethod: 'Tiền mặt',
+              price: 0,
+              quantity: 1,
               totalAmount: 0,
-              note: '',
-              status: 'Mới',
-            },
+              paidAmount: 0,
+              wholesaleInvoiceLabel: '',
+            }
           },
           {
-            key: 'confirm',
-            label: 'Xác nhận thanh toán',
-            title: 'Bán lẻ - Xác nhận thanh toán',
-            subtitle: 'Danh sách giao dịch chuyển khoản chờ xác nhận',
-            endpoint: '/products/retail-invoices?tabs=confirm',
-            icon: <WalletCards size={24} />,
-            primaryActionLabel: 'Thêm xác nhận thanh toán',
+            key: 'discount',
+            label: 'Có chiết khấu',
+            title: 'Hóa đơn bán sỉ - Có chiết khấu',
+            subtitle: 'Danh sách hóa đơn bán sỉ áp dụng chiết khấu',
+            endpoint: '/products/wholesale-invoices?tabs=discount',
+            icon: <Percent size={24} />,
+            primaryActionLabel: 'Tạo hóa đơn sỉ',
+            onPrimaryActionClick: () => setShowBranchModal(true),
             fields: [
-              { key: 'orderId', label: 'ID đơn hàng' },
-              { key: 'senderName', label: 'Khách chuyển khoản' },
-              { key: 'transactionCode', label: 'Mã giao dịch' },
-              { key: 'bankName', label: 'Ngân hàng' },
-              { key: 'bankAccountNo', label: 'Số tài khoản' },
-              { key: 'transactionDate', label: 'Ngày giao dịch' },
-              { key: 'store', label: 'Cửa hàng' },
-              { key: 'transactionContent', label: 'Nội dung giao dịch' },
-              { key: 'confirmedBy', label: 'Người xác nhận' },
+              { key: 'date', label: 'Ngày' },
+              { key: 'id', label: 'ID Hóa đơn' },
+              { key: 'customerName', label: 'Khách hàng' },
+              { key: 'productName', label: 'Tên sản phẩm' },
+              { key: 'productDiscount', label: 'Chiết khấu SP', type: 'money' },
+              { key: 'orderDiscount', label: 'Chiết khấu đơn', type: 'money' },
+              { key: 'totalAmount', label: 'Tổng tiền phải TT', type: 'money' },
+              { key: 'status', label: 'Trạng thái', type: 'status' },
             ],
             formFields: [
-              { key: 'orderId', label: 'ID đơn hàng', required: true },
-              { key: 'senderName', label: 'Khách chuyển khoản', required: true },
-              { key: 'transactionCode', label: 'Mã giao dịch', required: true },
-              { key: 'bankName', label: 'Ngân hàng', required: true },
-              { key: 'bankAccountNo', label: 'Số tài khoản' },
-              { key: 'transactionDate', label: 'Ngày giao dịch' },
-              { key: 'store', label: 'Cửa hàng' },
-              { key: 'transactionContent', label: 'Nội dung giao dịch', type: 'textarea' },
-              { key: 'confirmedBy', label: 'Người xác nhận' },
+              { key: 'id', label: 'ID Hóa đơn', required: true },
+              { key: 'date', label: 'Ngày lập (dd/mm/yyyy)', required: true },
+              { key: 'customerName', label: 'Khách hàng' },
+              { key: 'productName', label: 'Sản phẩm' },
+              { key: 'productDiscount', label: 'Chiết khấu SP', type: 'number' },
+              { key: 'orderDiscount', label: 'Chiết khấu đơn', type: 'number' },
+              { key: 'totalAmount', label: 'Tổng tiền phải TT', type: 'number' },
             ],
             createDefaults: {
-              tabs: ['confirm'],
-              orderId: '',
-              senderName: '',
-              transactionCode: '',
-              bankName: '',
-              bankAccountNo: '',
-              transactionDate: new Date().toLocaleDateString('vi-VN'),
-              store: '',
-              transactionContent: '',
-              confirmedBy: '',
-            },
+              id: '',
+              tabs: ['wholesale', 'discount'],
+              date: new Date().toLocaleDateString('vi-VN'),
+              customerName: '',
+              productName: '',
+              productDiscount: 0,
+              orderDiscount: 0,
+              totalAmount: 0,
+            }
           },
+          {
+            key: 'debt',
+            label: 'Có công nợ',
+            title: 'Hóa đơn bán sỉ - Có công nợ',
+            subtitle: 'Danh sách hóa đơn bán sỉ ghi nhận công nợ (chưa trả hết)',
+            endpoint: '/products/wholesale-invoices?tabs=debt',
+            icon: <WalletCards size={24} />,
+            primaryActionLabel: 'Tạo hóa đơn sỉ',
+            onPrimaryActionClick: () => setShowBranchModal(true),
+            fields: [
+              { key: 'date', label: 'Ngày' },
+              { key: 'id', label: 'ID Hóa đơn' },
+              { key: 'customerName', label: 'Khách hàng' },
+              { key: 'totalAmount', label: 'Tổng tiền phải TT', type: 'money' },
+              { key: 'paidAmount', label: 'Đã thanh toán', type: 'money' },
+              { key: 'debtAmount', label: 'Chưa thanh toán', type: 'money' },
+              { key: 'status', label: 'Trạng thái', type: 'status' },
+            ],
+            formFields: [
+              { key: 'id', label: 'ID Hóa đơn', required: true },
+              { key: 'date', label: 'Ngày lập (dd/mm/yyyy)', required: true },
+              { key: 'customerName', label: 'Khách hàng' },
+              { key: 'totalAmount', label: 'Tổng tiền phải TT', type: 'number' },
+              { key: 'paidAmount', label: 'Đã thanh toán', type: 'number' },
+              { key: 'debtAmount', label: 'Nợ chưa thanh toán', type: 'number' },
+            ],
+            createDefaults: {
+              id: '',
+              tabs: ['wholesale', 'debt'],
+              date: new Date().toLocaleDateString('vi-VN'),
+              customerName: '',
+              totalAmount: 0,
+              paidAmount: 0,
+              debtAmount: 0,
+            }
+          }
         ]}
       />
 
@@ -203,12 +184,12 @@ export function RetailInvoicePage({ channel }: RetailInvoicePageProps) {
           <div className="modal-card" style={{ maxWidth: '600px', width: '100%', borderRadius: '16px', border: '1px solid rgba(255, 255, 255, 0.08)', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.2)', background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)', color: '#f8fafc', padding: '0', overflow: 'hidden' }}>
             <div className="modal-header" style={{ padding: '24px 28px', borderBottom: '1px solid rgba(255, 255, 255, 0.06)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div style={{ background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)', width: '42px', height: '42px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)' }}>
+                <div style={{ background: 'linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)', width: '42px', height: '42px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(124, 58, 237, 0.3)' }}>
                   <Warehouse size={22} color="#ffffff" />
                 </div>
                 <div>
-                  <h2 style={{ fontSize: '18px', fontWeight: '600', color: '#ffffff', margin: 0 }}>Chọn Kho / Chi Nhánh</h2>
-                  <p style={{ fontSize: '13px', color: '#94a3b8', margin: '2px 0 0 0' }}>Bán lẻ cần xác định kho xuất hàng tương ứng</p>
+                  <h2 style={{ fontSize: '18px', fontWeight: '600', color: '#ffffff', margin: 0 }}>Chọn Kho / Chi Nhánh Bán Sỉ</h2>
+                  <p style={{ fontSize: '13px', color: '#94a3b8', margin: '2px 0 0 0' }}>Bán sỉ cần xác định kho xuất hàng tương ứng</p>
                 </div>
               </div>
               <button 
@@ -225,7 +206,7 @@ export function RetailInvoicePage({ channel }: RetailInvoicePageProps) {
             <div style={{ padding: '24px 28px', maxHeight: '400px', overflowY: 'auto' }}>
               {loadingBranches ? (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 0', gap: '12px' }}>
-                  <div style={{ width: '36px', height: '36px', border: '3px solid rgba(99, 102, 241, 0.1)', borderTopColor: '#6366f1', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+                  <div style={{ width: '36px', height: '36px', border: '3px solid rgba(124, 58, 237, 0.1)', borderTopColor: '#7c3aed', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
                   <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
                   <span style={{ color: '#94a3b8', fontSize: '14px' }}>Đang tải danh sách kho...</span>
                 </div>
@@ -244,14 +225,14 @@ export function RetailInvoicePage({ channel }: RetailInvoicePageProps) {
                         style={{ 
                           padding: '16px',
                           borderRadius: '12px',
-                          border: isSelected ? '2px solid #6366f1' : '1px solid rgba(255, 255, 255, 0.06)',
-                          background: isSelected ? 'rgba(99, 102, 241, 0.08)' : 'rgba(255, 255, 255, 0.02)',
+                          border: isSelected ? '2px solid #7c3aed' : '1px solid rgba(255, 255, 255, 0.06)',
+                          background: isSelected ? 'rgba(124, 58, 237, 0.08)' : 'rgba(255, 255, 255, 0.02)',
                           cursor: 'pointer',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'space-between',
                           transition: 'all 0.2s',
-                          boxShadow: isSelected ? '0 4px 12px rgba(99, 102, 241, 0.1)' : 'none'
+                          boxShadow: isSelected ? '0 4px 12px rgba(124, 58, 237, 0.1)' : 'none'
                         }}
                         onMouseEnter={(e) => {
                           if (!isSelected) {
@@ -269,7 +250,7 @@ export function RetailInvoicePage({ channel }: RetailInvoicePageProps) {
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1, marginRight: '16px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <span style={{ fontSize: '15px', fontWeight: '600', color: '#ffffff' }}>{branch.name}</span>
-                            <span style={{ background: isSelected ? 'rgba(99, 102, 241, 0.2)' : 'rgba(255, 255, 255, 0.08)', color: isSelected ? '#a5b4fc' : '#94a3b8', fontSize: '11px', fontWeight: '500', padding: '2px 8px', borderRadius: '4px', textTransform: 'uppercase' }}>
+                            <span style={{ background: isSelected ? 'rgba(124, 58, 237, 0.2)' : 'rgba(255, 255, 255, 0.08)', color: isSelected ? '#ddd6fe' : '#94a3b8', fontSize: '11px', fontWeight: '500', padding: '2px 8px', borderRadius: '4px', textTransform: 'uppercase' }}>
                               {branch.code}
                             </span>
                             {branch.isDefault && (
@@ -293,7 +274,7 @@ export function RetailInvoicePage({ channel }: RetailInvoicePageProps) {
                             )}
                           </div>
                         </div>
-                        <div style={{ width: '22px', height: '22px', borderRadius: '50%', border: isSelected ? '2px solid #6366f1' : '2px solid rgba(255, 255, 255, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, background: isSelected ? '#6366f1' : 'transparent', transition: 'all 0.2s' }}>
+                        <div style={{ width: '22px', height: '22px', borderRadius: '50%', border: isSelected ? '2px solid #7c3aed' : '2px solid rgba(255, 255, 255, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, background: isSelected ? '#7c3aed' : 'transparent', transition: 'all 0.2s' }}>
                           {isSelected && <Check size={12} color="#ffffff" strokeWidth={3} />}
                         </div>
                       </div>
@@ -322,9 +303,9 @@ export function RetailInvoicePage({ channel }: RetailInvoicePageProps) {
                   padding: '10px 22px', 
                   fontSize: '14px', 
                   fontWeight: '500', 
-                  background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)', 
+                  background: 'linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)', 
                   border: 'none', 
-                  boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)',
+                  boxShadow: '0 4px 12px rgba(124, 58, 237, 0.3)',
                   display: 'flex',
                   alignItems: 'center',
                   gap: '8px',

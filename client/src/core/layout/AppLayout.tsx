@@ -29,6 +29,9 @@ import {
   Users,
   WalletCards,
   X,
+  Truck,
+  AlertTriangle,
+  List,
 } from 'lucide-react';
 import { http } from '../api/http';
 
@@ -71,9 +74,21 @@ const baseMenuGroups = [
       { to: '/sales-channels/store/find',      label: 'Tìm hóa đơn',          icon: Search },
       { to: '/sales-channels/store/retail',    label: 'Bán lẻ',                icon: ShoppingCart },
       { to: '/sales-channels/store/wholesale', label: 'Bán sỉ',                icon: ShoppingBag },
-      { to: '/sales-channels/store/einvoice',  label: 'Hóa đơn điện tử',       icon: FileText },
       { to: '/sales-channels/store/refund',    label: 'Trả hàng',              icon: RotateCcw },
-      { to: '/sales-channels/store/gift-debt', label: 'Nợ quà tặng',           icon: Gift },
+    ],
+  },
+  {
+    label: 'Đơn hàng',
+    items: [
+      { to: '/orders/manage', label: 'Đơn hàng', icon: ShoppingCart },
+      { to: '/orders/duplicate', label: 'Đơn trùng', icon: Search },
+      { to: '/orders/packing', label: 'Đóng gói', icon: Package },
+      { to: '/orders/handover', label: 'Biên bản bàn giao', icon: FileText },
+      { to: '/orders/shipping-pending', label: 'Chờ gửi vận chuyển', icon: Truck },
+      { to: '/orders/disputes', label: 'Khiếu nại', icon: AlertTriangle },
+      { to: '/orders/cod-control', label: 'Đối soát COD', icon: ClipboardCheck },
+      { to: '/orders/sources', label: 'Nguồn đơn hàng', icon: List },
+      { to: '/orders/history', label: 'Lịch sử sửa xóa', icon: History },
     ],
   },
   {

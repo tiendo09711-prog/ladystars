@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { crudRoutes } from '../../core/utils/routeFactory.js';
 import { writeAuditLog } from '../../core/audit/audit.service.js';
-import { Batch, Category, DeliveryPartner, PaymentMethod, Product, ProductBranchStock, ProductLog, ProductRefund, SaleChannel, SalePayment, Shelf, StockAdjustment, Trademark, ProductEditLog, RetailInvoice } from './product.models.js';
+import { Batch, Category, DeliveryPartner, PaymentMethod, Product, ProductBranchStock, ProductLog, ProductRefund, SaleChannel, SalePayment, Shelf, StockAdjustment, Trademark, ProductEditLog, RetailInvoice, WholesaleInvoice, RefundInvoice } from './product.models.js';
 import { buildProductRefundPayload, buildSalePaymentPayload, completeProductRefund, completeSalePayment, completeStockAdjustment } from './product.service.js';
 import { Branch } from '../../core/org/branch.model.js';
 import { Customer } from '../customer/customer.models.js';
@@ -33,6 +33,9 @@ router.use('/stock-adjustments', crudRoutes(StockAdjustment));
 router.use('/logs', crudRoutes(ProductLog));
 router.use('/batches', crudRoutes(Batch));
 router.use('/retail-invoices', crudRoutes(RetailInvoice));
+router.use('/wholesale-invoices', crudRoutes(WholesaleInvoice));
+router.use('/refund-invoices', crudRoutes(RefundInvoice));
+
 
 
 router.get('/sales', async (req, res) => {

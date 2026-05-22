@@ -30,6 +30,18 @@ import { ProductImportPage } from './modules/warehouse/ProductImportPage';
 import { ProductExportPage } from './modules/warehouse/ProductExportPage';
 import { SalesChannelPage } from './modules/sales/SalesChannelPage';
 import { SalesChannelSubPage } from './modules/sales/SalesChannelSubPage';
+import { RetailInvoiceCreatePage } from './modules/sales/RetailInvoiceCreatePage';
+import { WholesaleInvoiceCreatePage } from './modules/sales/WholesaleInvoiceCreatePage';
+import { RefundInvoiceCreatePage } from './modules/sales/RefundInvoiceCreatePage';
+import { OrdersManagePage } from './modules/orders/OrdersManagePage';
+import { OrdersDuplicatePage } from './modules/orders/OrdersDuplicatePage';
+import { OrdersPackagingPage } from './modules/orders/OrdersPackagingPage';
+import { OrdersHandoverPage } from './modules/orders/OrdersHandoverPage';
+import { OrdersShippingPendingPage } from './modules/orders/OrdersShippingPendingPage';
+import { OrdersDisputesPage } from './modules/orders/OrdersDisputesPage';
+import { OrdersCodControlPage } from './modules/orders/OrdersCodControlPage';
+import { OrdersSourcesPage } from './modules/orders/OrdersSourcesPage';
+import { OrdersHistoryPage } from './modules/orders/OrdersHistoryPage';
 import './styles/app.css';
 
 const router = createBrowserRouter([
@@ -67,12 +79,26 @@ const router = createBrowserRouter([
 
       // ── Kênh bán ───────────────────────────────────────────────
       { path: 'sales-channels/:channel', element: <SalesChannelPage /> },
+      { path: 'sales-channels/:channel/retail/create', element: <RetailInvoiceCreatePage /> },
+      { path: 'sales-channels/:channel/wholesale/create', element: <WholesaleInvoiceCreatePage /> },
+      { path: 'sales-channels/:channel/refund/create', element: <RefundInvoiceCreatePage /> },
       { path: 'sales-channels/:channel/:action', element: <SalesChannelSubPage /> },
 
-      // ── Vận hành ───────────────────────────────────────────────
+      // ── Vận hành ────────────────────────────────────────────
       { path: 'accounting', element: <AccountingPage /> },
       { path: 'tasks', element: <TaskPage /> },
       { path: 'print-forms', element: <PrintFormsPage /> },
+
+      // ── Đơn hàng ────────────────────────────────────────────
+      { path: 'orders/manage', element: <OrdersManagePage /> },
+      { path: 'orders/duplicate', element: <OrdersDuplicatePage /> },
+      { path: 'orders/packing', element: <OrdersPackagingPage /> },
+      { path: 'orders/handover', element: <OrdersHandoverPage /> },
+      { path: 'orders/shipping-pending', element: <OrdersShippingPendingPage /> },
+      { path: 'orders/disputes', element: <OrdersDisputesPage /> },
+      { path: 'orders/cod-control', element: <OrdersCodControlPage /> },
+      { path: 'orders/sources', element: <OrdersSourcesPage /> },
+      { path: 'orders/history', element: <OrdersHistoryPage /> },
 
       // ── Nhân viên & Cài đặt ────────────────────────────────────
       { path: 'staff', element: <StaffPage /> },
