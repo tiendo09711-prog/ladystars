@@ -251,3 +251,25 @@ ProductEditLogSchema.index({ createdAt: -1 });
 
 export const ProductEditLog = model('ProductEditLog', ProductEditLogSchema);
 
+const RetailInvoiceSchema = new Schema({
+  id: { type: String, unique: true, sparse: true },
+  tabs: [String],
+  date: String,
+  orderId: String,
+  type: String,
+  customerName: String,
+  productCode: String,
+  productName: String,
+  totalAmount: { type: Number, default: 0 },
+  status: { type: String, default: 'Mới' },
+  // Confirm payment fields
+  senderName: String,
+  transactionCode: String,
+  bankName: String,
+  bankAccountNo: String,
+  transactionDate: String,
+  confirmedBy: String,
+}, { timestamps: true, strict: false });
+
+RetailInvoiceSchema.index({ id: 'text', orderId: 'text', customerName: 'text', productName: 'text' });
+export const RetailInvoice = model('RetailInvoice', RetailInvoiceSchema);

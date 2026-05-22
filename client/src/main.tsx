@@ -19,9 +19,17 @@ import { StaffPage } from './modules/staff/StaffPage';
 import { SettingsPage } from './modules/settings/SettingsPage';
 import { WarehouseTransactionPage } from './modules/warehouse/WarehouseTransactionPage';
 import { WarehouseTransferPage } from './modules/warehouse/WarehouseTransferPage';
+import { WarehouseTransferCreatePage } from './modules/warehouse/WarehouseTransferCreatePage';
 import { WarehouseAuditPage } from './modules/warehouse/WarehouseAuditPage';
 import { WarehouseDraftPage } from './modules/warehouse/WarehouseDraftPage';
 import { WarehouseHistoryPage } from './modules/warehouse/WarehouseHistoryPage';
+import { VoucherImportPage } from './modules/warehouse/VoucherImportPage';
+import { VoucherExportPage } from './modules/warehouse/VoucherExportPage';
+import { VoucherExcelImportPage } from './modules/warehouse/VoucherExcelImportPage';
+import { ProductImportPage } from './modules/warehouse/ProductImportPage';
+import { ProductExportPage } from './modules/warehouse/ProductExportPage';
+import { SalesChannelPage } from './modules/sales/SalesChannelPage';
+import { SalesChannelSubPage } from './modules/sales/SalesChannelSubPage';
 import './styles/app.css';
 
 const router = createBrowserRouter([
@@ -41,7 +49,13 @@ const router = createBrowserRouter([
 
       // ── Kho hàng ───────────────────────────────────────────────
       { path: 'warehouse/transactions', element: <WarehouseTransactionPage /> },
+      { path: 'warehouse/transactions/vouchers/import', element: <VoucherImportPage /> },
+      { path: 'warehouse/transactions/vouchers/export', element: <VoucherExportPage /> },
+      { path: 'warehouse/transactions/vouchers/excel', element: <VoucherExcelImportPage /> },
+      { path: 'warehouse/transactions/products/import', element: <ProductImportPage /> },
+      { path: 'warehouse/transactions/products/export', element: <ProductExportPage /> },
       { path: 'warehouse/transfers', element: <WarehouseTransferPage /> },
+      { path: 'warehouse/transfers/create', element: <WarehouseTransferCreatePage /> },
       { path: 'warehouse/audit', element: <WarehouseAuditPage /> },
       { path: 'warehouse/drafts', element: <WarehouseDraftPage /> },
       { path: 'warehouse/history', element: <WarehouseHistoryPage /> },
@@ -50,6 +64,10 @@ const router = createBrowserRouter([
       { path: 'sales', element: <SalesPage /> },
       { path: 'customers', element: <CustomerPage /> },
       { path: 'vendors', element: <VendorPage /> },
+
+      // ── Kênh bán ───────────────────────────────────────────────
+      { path: 'sales-channels/:channel', element: <SalesChannelPage /> },
+      { path: 'sales-channels/:channel/:action', element: <SalesChannelSubPage /> },
 
       // ── Vận hành ───────────────────────────────────────────────
       { path: 'accounting', element: <AccountingPage /> },

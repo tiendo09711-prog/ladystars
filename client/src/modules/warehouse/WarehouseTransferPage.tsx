@@ -1,22 +1,221 @@
-import { Shuffle } from 'lucide-react';
+import { Shuffle, FileText, Send, Inbox } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { TabbedModulePage } from '../../core/components/TabbedModulePage';
 
 export function WarehouseTransferPage() {
+  const navigate = useNavigate();
   return (
-    <div className="workspace-page">
-      <div className="page-heading">
-        <div className="page-title-block">
-          <div className="page-icon"><Shuffle size={22} /></div>
-          <div>
-            <h1>Chuyển kho</h1>
-            <p>Điều chuyển hàng hóa giữa các kho</p>
-          </div>
-        </div>
-      </div>
-      <div className="data-card" style={{ padding: '60px 24px', textAlign: 'center' }}>
-        <Shuffle size={48} style={{ color: 'var(--muted)', margin: '0 auto 16px', display: 'block' }} />
-        <h2 style={{ color: 'var(--muted)', fontWeight: 700, margin: '0 0 8px' }}>Trang đang được xây dựng</h2>
-        <p style={{ color: 'var(--muted)', margin: 0 }}>Chức năng chuyển kho sẽ sớm được hoàn thiện.</p>
-      </div>
-    </div>
+    <TabbedModulePage
+      tabs={[
+        {
+          key: 'all',
+          label: 'Tất cả',
+          title: 'Chuyển kho - Tất cả',
+          subtitle: 'Danh sách tất cả các phiếu chuyển kho',
+          endpoint: '/warehouse/transfers?tabs=all',
+          icon: <Shuffle size={24} />,
+          primaryActionLabel: 'Tạo phiếu chuyển kho',
+          onPrimaryActionClick: () => navigate('/warehouse/transfers/create'),
+          fields: [
+            { key: 'id', label: 'ID chuyển kho' },
+            { key: 'date', label: 'Ngày' },
+            { key: 'warehouse', label: 'Kho hàng' },
+            { key: 'type', label: 'Kiểu' },
+            { key: 'spCount', label: 'Số SP', type: 'number' },
+            { key: 'qty', label: 'Tổng SL', type: 'number' },
+            { key: 'totalAmount', label: 'Tổng tiền', type: 'money' },
+            { key: 'creator', label: 'Người lập phiếu' },
+            { key: 'note', label: 'Ghi chú' },
+          ],
+          formFields: [
+            { key: 'id', label: 'ID chuyển kho', required: true },
+            { key: 'date', label: 'Ngày (yyyy-mm-dd)', required: true },
+            { key: 'warehouse', label: 'Kho hàng', required: true },
+            { key: 'type', label: 'Kiểu chuyển kho', required: true },
+            { key: 'spCount', label: 'Số sản phẩm (SP)', type: 'number' },
+            { key: 'qty', label: 'Số lượng tổng (SL)', type: 'number' },
+            { key: 'totalAmount', label: 'Tổng tiền', type: 'number' },
+            { key: 'creator', label: 'Người lập phiếu' },
+            { key: 'note', label: 'Ghi chú', type: 'textarea' },
+          ],
+          createDefaults: {
+            id: '',
+            date: '',
+            warehouse: '',
+            type: '',
+            spCount: 0,
+            qty: 0,
+            totalAmount: 0,
+            creator: '',
+            note: '',
+          },
+        },
+        {
+          key: 'draft',
+          label: 'Phiếu nháp',
+          title: 'Chuyển kho - Phiếu nháp',
+          subtitle: 'Danh sách phiếu chuyển kho nháp',
+          endpoint: '/warehouse/transfers?tabs=draft',
+          icon: <FileText size={24} />,
+          primaryActionLabel: 'Tạo phiếu nháp',
+          onPrimaryActionClick: () => navigate('/warehouse/transfers/create'),
+          fields: [
+            { key: 'id', label: 'ID' },
+            { key: 'date', label: 'Ngày' },
+            { key: 'type', label: 'Kiểu' },
+            { key: 'warehouse', label: 'Kho' },
+            { key: 'spCount', label: 'Số lượng SP', type: 'number' },
+            { key: 'qty', label: 'Tổng SL', type: 'number' },
+            { key: 'creator', label: 'Người tạo' },
+            { key: 'timeCreated', label: 'Thời gian lập phiếu' },
+            { key: 'note', label: 'Mô tả' },
+            { key: 'approvedBy', label: 'Người duyệt' },
+            { key: 'dateApproved', label: 'Ngày duyệt' },
+            { key: 'confirmedBy', label: 'Người xác nhận' },
+            { key: 'dateConfirmed', label: 'Ngày xác nhận' },
+          ],
+          formFields: [
+            { key: 'id', label: 'ID chuyển kho', required: true },
+            { key: 'date', label: 'Ngày (dd/mm/yyyy)', required: true },
+            { key: 'type', label: 'Kiểu', required: true },
+            { key: 'warehouse', label: 'Kho hàng', required: true },
+            { key: 'spCount', label: 'Số lượng SP', type: 'number' },
+            { key: 'qty', label: 'Tổng SL', type: 'number' },
+            { key: 'creator', label: 'Người tạo' },
+            { key: 'timeCreated', label: 'Thời gian lập phiếu' },
+            { key: 'note', label: 'Mô tả', type: 'textarea' },
+            { key: 'approvedBy', label: 'Người duyệt' },
+            { key: 'dateApproved', label: 'Ngày duyệt' },
+            { key: 'confirmedBy', label: 'Người xác nhận' },
+            { key: 'dateConfirmed', label: 'Ngày xác nhận' },
+          ],
+          createDefaults: {
+            id: '',
+            date: '',
+            type: '',
+            warehouse: '',
+            spCount: 0,
+            qty: 0,
+            creator: '',
+            timeCreated: '',
+            note: '',
+            approvedBy: '',
+            dateApproved: '',
+            confirmedBy: '',
+            dateConfirmed: '',
+          },
+        },
+        {
+          key: 'transferring',
+          label: 'Đang chuyển đi',
+          title: 'Chuyển kho - Đang chuyển đi',
+          subtitle: 'Danh sách phiếu chuyển kho đang được vận chuyển',
+          endpoint: '/warehouse/transfers?tabs=transferring',
+          icon: <Send size={24} />,
+          primaryActionLabel: 'Tạo phiếu đang gửi',
+          onPrimaryActionClick: () => navigate('/warehouse/transfers/create'),
+          fields: [
+            { key: 'id', label: 'ID' },
+            { key: 'date', label: 'Ngày' },
+            { key: 'type', label: 'Kiểu' },
+            { key: 'warehouse', label: 'Kho' },
+            { key: 'spCount', label: 'Số lượng SP', type: 'number' },
+            { key: 'qty', label: 'Tổng SL', type: 'number' },
+            { key: 'creator', label: 'Người tạo' },
+            { key: 'timeCreated', label: 'Thời gian lập phiếu' },
+            { key: 'note', label: 'Mô tả' },
+            { key: 'approvedBy', label: 'Người duyệt' },
+            { key: 'dateApproved', label: 'Ngày duyệt' },
+            { key: 'confirmedBy', label: 'Người xác nhận' },
+            { key: 'dateConfirmed', label: 'Ngày xác nhận' },
+          ],
+          formFields: [
+            { key: 'id', label: 'ID chuyển kho', required: true },
+            { key: 'date', label: 'Ngày (dd/mm/yyyy)', required: true },
+            { key: 'type', label: 'Kiểu', required: true },
+            { key: 'warehouse', label: 'Kho hàng', required: true },
+            { key: 'spCount', label: 'Số lượng SP', type: 'number' },
+            { key: 'qty', label: 'Tổng SL', type: 'number' },
+            { key: 'creator', label: 'Người tạo' },
+            { key: 'timeCreated', label: 'Thời gian lập phiếu' },
+            { key: 'note', label: 'Mô tả', type: 'textarea' },
+            { key: 'approvedBy', label: 'Người duyệt' },
+            { key: 'dateApproved', label: 'Ngày duyệt' },
+            { key: 'confirmedBy', label: 'Người xác nhận' },
+            { key: 'dateConfirmed', label: 'Ngày xác nhận' },
+          ],
+          createDefaults: {
+            id: '',
+            date: '',
+            type: '',
+            warehouse: '',
+            spCount: 0,
+            qty: 0,
+            creator: '',
+            timeCreated: '',
+            note: '',
+            approvedBy: '',
+            dateApproved: '',
+            confirmedBy: '',
+            dateConfirmed: '',
+          },
+        },
+        {
+          key: 'incoming',
+          label: 'Sắp chuyển đến',
+          title: 'Chuyển kho - Sắp chuyển đến',
+          subtitle: 'Danh sách phiếu chuyển kho sắp nhận',
+          endpoint: '/warehouse/transfers?tabs=incoming',
+          icon: <Inbox size={24} />,
+          primaryActionLabel: 'Tạo phiếu sắp đến',
+          onPrimaryActionClick: () => navigate('/warehouse/transfers/create'),
+          fields: [
+            { key: 'id', label: 'ID' },
+            { key: 'date', label: 'Ngày' },
+            { key: 'type', label: 'Kiểu' },
+            { key: 'warehouse', label: 'Kho' },
+            { key: 'spCount', label: 'Số lượng SP', type: 'number' },
+            { key: 'qty', label: 'Tổng SL', type: 'number' },
+            { key: 'creator', label: 'Người tạo' },
+            { key: 'timeCreated', label: 'Thời gian lập phiếu' },
+            { key: 'note', label: 'Mô tả' },
+            { key: 'approvedBy', label: 'Người duyệt' },
+            { key: 'dateApproved', label: 'Ngày duyệt' },
+            { key: 'confirmedBy', label: 'Người xác nhận' },
+            { key: 'dateConfirmed', label: 'Ngày xác nhận' },
+          ],
+          formFields: [
+            { key: 'id', label: 'ID chuyển kho', required: true },
+            { key: 'date', label: 'Ngày (dd/mm/yyyy)', required: true },
+            { key: 'type', label: 'Kiểu', required: true },
+            { key: 'warehouse', label: 'Kho hàng', required: true },
+            { key: 'spCount', label: 'Số lượng SP', type: 'number' },
+            { key: 'qty', label: 'Tổng SL', type: 'number' },
+            { key: 'creator', label: 'Người tạo' },
+            { key: 'timeCreated', label: 'Thời gian lập phiếu' },
+            { key: 'note', label: 'Mô tả', type: 'textarea' },
+            { key: 'approvedBy', label: 'Người duyệt' },
+            { key: 'dateApproved', label: 'Ngày duyệt' },
+            { key: 'confirmedBy', label: 'Người xác nhận' },
+            { key: 'dateConfirmed', label: 'Ngày xác nhận' },
+          ],
+          createDefaults: {
+            id: '',
+            date: '',
+            type: '',
+            warehouse: '',
+            spCount: 0,
+            qty: 0,
+            creator: '',
+            timeCreated: '',
+            note: '',
+            approvedBy: '',
+            dateApproved: '',
+            confirmedBy: '',
+            dateConfirmed: '',
+          },
+        },
+      ]}
+    />
   );
 }

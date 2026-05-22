@@ -365,3 +365,60 @@ h1 { margin: 0; font-size: 28px; letter-spacing: 0; }
   .page-actions { justify-content: flex-start; }
   .user-info { display: none; }
 }
+
+.dropdown-container {
+  position: relative;
+  display: inline-block;
+}
+.dropdown-container.full-width {
+  width: 100%;
+}
+.dropdown-menu {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  margin-top: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  z-index: 100;
+  min-width: 200px;
+  display: flex;
+  flex-direction: column;
+  padding: 6px;
+}
+.dropdown-menu.left-align {
+  right: auto;
+  left: 0;
+  width: 100%;
+}
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 10px 12px;
+  border-radius: 6px;
+  color: #1e293b;
+  font-weight: 600;
+  text-align: left;
+  text-decoration: none;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.dropdown-item:hover {
+  background: var(--border-soft);
+  color: var(--primary);
+}
+.dropdown-item svg {
+  color: var(--muted);
+  transition: color 0.15s ease;
+}
+.dropdown-item:hover svg {
+  color: var(--primary);
+}
+

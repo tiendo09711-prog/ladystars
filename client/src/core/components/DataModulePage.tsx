@@ -38,10 +38,12 @@ export type DataModulePageProps = {
   formFields: FormField[];
   createDefaults: Record<string, unknown>;
   primaryActionLabel: string;
+  primaryActions?: { label: string; icon?: ReactNode; onClick: () => void }[];
   quickFilters?: { label: string; value: string }[];
   metrics?: ModuleMetric[];
   normalizePayload?: (payload: Record<string, unknown>) => Record<string, unknown>;
   actions?: RowAction[];
+  onPrimaryActionClick?: () => void;
 };
 
 function getValue(item: Record<string, any>, key: string) {
@@ -77,10 +79,12 @@ export function DataModulePage({
   formFields,
   createDefaults,
   primaryActionLabel,
+  primaryActions,
   quickFilters = [],
   metrics = [],
   normalizePayload,
   actions = [],
+  onPrimaryActionClick,
 }: DataModulePageProps) {
   const [items, setItems] = useState<Record<string, any>[]>([]);
   const [loading, setLoading] = useState(true);
@@ -90,6 +94,18 @@ export function DataModulePage({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<Record<string, unknown>>(createDefaults);
   const [error, setError] = useState('');
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [showQuickDropdown, setShowQuickDropdown] = useState(false);
+
+  useEffect(() => {
+    if (!showDropdown && !showQuickDropdown) return;
+    const handleClose = () => {
+      setShowDropdown(false);
+      setShowQuickDropdown(false);
+    };
+    window.addEventListener('click', handleClose);
+    return () => window.removeEventListener('click', handleClose);
+  }, [showDropdown, showQuickDropdown]);
 
   const load = async () => {
     setLoading(true);
@@ -206,9 +222,42 @@ export function DataModulePage({
           <button className="btn btn-outline" type="button" onClick={() => alert('Dùng API CRUD hoặc npm run load để nạp dữ liệu mẫu lên MongoDB Atlas.')} title="Nhập dữ liệu">
             <FileUp size={16} /> Nhập
           </button>
-          <button className="btn btn-primary" type="button" onClick={openCreate}>
-            <Plus size={16} /> {primaryActionLabel}
-          </button>
+          {primaryActions && primaryActions.length > 0 ? (
+            <div className="dropdown-container">
+              <button
+                className="btn btn-primary"
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowDropdown(!showDropdown);
+                }}
+              >
+                <Plus size={16} /> {primaryActionLabel}
+              </button>
+              {showDropdown && (
+                <div className="dropdown-menu">
+                  {primaryActions.map((action, idx) => (
+                    <button
+                      key={idx}
+                      className="dropdown-item"
+                      type="button"
+                      onClick={() => {
+                        setShowDropdown(false);
+                        action.onClick();
+                      }}
+                    >
+                      {action.icon}
+                      <span>{action.label}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <button className="btn btn-primary" type="button" onClick={onPrimaryActionClick ? onPrimaryActionClick : openCreate}>
+              <Plus size={16} /> {primaryActionLabel}
+            </button>
+          )}
         </div>
       </div>
 
@@ -249,9 +298,42 @@ export function DataModulePage({
           )}
           <div className="quick-actions">
             <span>Thao tác nhanh</span>
-            <button className="btn btn-primary full" type="button" onClick={openCreate}>
-              <Plus size={16} /> Tạo mới
-            </button>
+            {primaryActions && primaryActions.length > 0 ? (
+              <div className="dropdown-container full-width">
+                <button
+                  className="btn btn-primary full"
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowQuickDropdown(!showQuickDropdown);
+                  }}
+                >
+                  <Plus size={16} /> Tạo mới
+                </button>
+                {showQuickDropdown && (
+                  <div className="dropdown-menu left-align">
+                    {primaryActions.map((action, idx) => (
+                      <button
+                        key={idx}
+                        className="dropdown-item"
+                        type="button"
+                        onClick={() => {
+                          setShowQuickDropdown(false);
+                          action.onClick();
+                        }}
+                      >
+                        {action.icon}
+                        <span>{action.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <button className="btn btn-primary full" type="button" onClick={openCreate}>
+                <Plus size={16} /> Tạo mới
+              </button>
+            )}
           </div>
         </aside>
 

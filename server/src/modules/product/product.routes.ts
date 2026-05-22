@@ -1,9 +1,10 @@
 import { Router } from 'express';
 import { crudRoutes } from '../../core/utils/routeFactory.js';
 import { writeAuditLog } from '../../core/audit/audit.service.js';
-import { Batch, Category, DeliveryPartner, PaymentMethod, Product, ProductBranchStock, ProductLog, ProductRefund, SaleChannel, SalePayment, Shelf, StockAdjustment, Trademark, ProductEditLog } from './product.models.js';
+import { Batch, Category, DeliveryPartner, PaymentMethod, Product, ProductBranchStock, ProductLog, ProductRefund, SaleChannel, SalePayment, Shelf, StockAdjustment, Trademark, ProductEditLog, RetailInvoice } from './product.models.js';
 import { buildProductRefundPayload, buildSalePaymentPayload, completeProductRefund, completeSalePayment, completeStockAdjustment } from './product.service.js';
 import { Branch } from '../../core/org/branch.model.js';
+import { Customer } from '../customer/customer.models.js';
 
 const router = Router();
 
@@ -31,13 +32,36 @@ router.use('/payment-methods', crudRoutes(PaymentMethod));
 router.use('/stock-adjustments', crudRoutes(StockAdjustment));
 router.use('/logs', crudRoutes(ProductLog));
 router.use('/batches', crudRoutes(Batch));
+router.use('/retail-invoices', crudRoutes(RetailInvoice));
+
 
 router.get('/sales', async (req, res) => {
   const page = Math.max(Number(req.query.page ?? 1), 1);
   const limit = Math.min(Math.max(Number(req.query.limit ?? 50), 1), 100);
+  
+  const filter: any = {};
+  if (req.query.code) {
+    filter.code = new RegExp(String(req.query.code).trim(), 'i');
+  }
+  if (req.query.customerPhone) {
+    const customers = await Customer.find({
+      phone: new RegExp(String(req.query.customerPhone).trim(), 'i')
+    }).select('_id');
+    filter.customerId = { $in: customers.map(c => c._id) };
+  }
+  if (req.query.fromDate || req.query.toDate) {
+    filter.createdAt = {};
+    if (req.query.fromDate) filter.createdAt.$gte = new Date(String(req.query.fromDate));
+    if (req.query.toDate) {
+      const end = new Date(String(req.query.toDate));
+      end.setHours(23, 59, 59, 999);
+      filter.createdAt.$lte = end;
+    }
+  }
+
   const [items, total] = await Promise.all([
-    populateSale(SalePayment.find().sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit)),
-    SalePayment.countDocuments(),
+    populateSale(SalePayment.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit)),
+    SalePayment.countDocuments(filter),
   ]);
   res.json({ items, total, page, limit });
 });

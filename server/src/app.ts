@@ -18,6 +18,7 @@ import accountingRoutes from './modules/accounting/accounting.routes.js';
 import taskRoutes from './modules/task/task.routes.js';
 import printFormsRoutes from './modules/printForms/printForms.routes.js';
 import dashboardRoutes from './modules/dashboard/dashboard.routes.js';
+import warehouseRoutes from './modules/warehouse/warehouse.routes.js';
 
 const app = express();
 const allowedOrigins = new Set([env.clientUrl, 'http://localhost:5173', 'http://localhost:5174']);
@@ -52,6 +53,7 @@ app.use('/api/vendors', requireAuth, vendorRoutes);
 app.use('/api/accounting', requireAuth, accountingRoutes);
 app.use('/api/tasks', requireAuth, taskRoutes);
 app.use('/api/print-forms', requireAuth, printFormsRoutes);
+app.use('/api/warehouse', requireAuth, warehouseRoutes);
 
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error(err);
