@@ -27,6 +27,7 @@ import {
 import { PrintForm } from './modules/printForms/printForms.models.js';
 import { Project, Task } from './modules/task/task.models.js';
 import { Vendor, VendorGroup, VendorPurchase, VendorRefund, VendorTransfer } from './modules/vendor/vendor.models.js';
+import { Order } from './modules/orders/orders.models.js';
 
 function detectSeparator(filePath: string) {
     if (!fs.existsSync(filePath)) return ',';
@@ -461,6 +462,71 @@ async function load() {
       billCount++;
   }
   console.log(`✅ HÓA ĐƠN XNK: Up thành công ${billCount} bản ghi.`);
+
+  // 7. ĐƠN HÀNG MẪU (DỰA THEO HTML TEMPLATE)
+  console.log("⏳ ĐANG TẠO DỮ LIỆU ĐƠN HÀNG MẪU...");
+  const orderStatuses = [
+    'Cần xử lí', 'Xác nhận', 'Chờ thanh toán', 'Đã thanh toán',
+    'Thanh toán', 'In và đóng gói', 'Đang chuyển', 'Khiếu nại'
+  ];
+  
+  let allProducts = await Product.find({});
+  if (allProducts.length === 0) {
+    console.log("🌱 Database trống. Đang tạo sản phẩm mẫu để test...");
+    const defaultProducts = [];
+    for (let i = 1; i <= 5; i++) {
+      const p = await upsert(Product, { code: `SKU-00${i}` }, {
+        name: `Sản phẩm đóng gói ${i}`,
+        code: `SKU-00${i}`,
+        cost: 50000 + i * 5000,
+        price: 90000 + i * 10000,
+        qty: 100,
+        unit: 'cái',
+        status: 'active',
+        userId: admin._id,
+      });
+      defaultProducts.push(p);
+    }
+    allProducts = defaultProducts;
+  }
+  
+  for (let i = 1; i <= 20; i++) {
+    const status = orderStatuses[i % orderStatuses.length];
+    const orderProducts = [];
+    let calculatedTotal = 0;
+    if (allProducts.length > 0) {
+      const count = Math.floor(Math.random() * 2) + 1; // 1-2 products
+      for (let j = 0; j < count; j++) {
+        const prodIndex = (i + j * 7) % allProducts.length;
+        const prod = allProducts[prodIndex];
+        const qty = ((i + j) % 3) + 1; // 1 to 3 items
+        orderProducts.push({
+          productId: prod._id,
+          sku: prod.code,
+          productName: prod.name,
+          quantity: qty,
+          scannedQuantity: 0,
+        });
+        calculatedTotal += (prod.price || 100000) * qty;
+      }
+    }
+    
+    await upsert(Order, { orderCode: `ORD-2026-${1000 + i}` }, {
+      orderCode: `ORD-2026-${1000 + i}`,
+      customerName: `Khách hàng ${i}`,
+      customerPhone: `09000000${i.toString().padStart(2, '0')}`,
+      shippingAddress: `${i} Đường Lê Lợi, Quận 1, TP HCM`,
+      paymentMethod: i % 2 === 0 ? 'COD' : 'Chuyển khoản',
+      totalAmount: calculatedTotal || (150000 + (i * 10000)),
+      status: status,
+      warehouse: i % 2 === 0 ? 'Kho Hà Nội' : 'Kho HCM',
+      deliveryStatus: status === 'Đang chuyển' ? 'Đang giao' : 'Chờ lấy hàng',
+      note: `Đơn hàng mẫu trạng thái ${status}`,
+      products: orderProducts,
+      userId: admin._id,
+    });
+  }
+  console.log("✅ ĐƠN HÀNG MẪU: Đã tạo 20 bản ghi vào collection.");
 
   await Promise.all(Object.values(mongoose.models).map((model) => model.createCollection().catch(() => undefined)));
   await Promise.all(Object.values(mongoose.models).map((model) => model.syncIndexes().catch(() => undefined)));

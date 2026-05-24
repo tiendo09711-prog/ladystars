@@ -21,6 +21,7 @@ import { WarehouseTransactionPage } from './modules/warehouse/WarehouseTransacti
 import { WarehouseTransferPage } from './modules/warehouse/WarehouseTransferPage';
 import { WarehouseTransferCreatePage } from './modules/warehouse/WarehouseTransferCreatePage';
 import { WarehouseAuditPage } from './modules/warehouse/WarehouseAuditPage';
+import { WarehouseAuditCreatePage } from './modules/warehouse/WarehouseAuditCreatePage';
 import { WarehouseDraftPage } from './modules/warehouse/WarehouseDraftPage';
 import { WarehouseHistoryPage } from './modules/warehouse/WarehouseHistoryPage';
 import { VoucherImportPage } from './modules/warehouse/VoucherImportPage';
@@ -34,7 +35,6 @@ import { RetailInvoiceCreatePage } from './modules/sales/RetailInvoiceCreatePage
 import { WholesaleInvoiceCreatePage } from './modules/sales/WholesaleInvoiceCreatePage';
 import { RefundInvoiceCreatePage } from './modules/sales/RefundInvoiceCreatePage';
 import { OrdersManagePage } from './modules/orders/OrdersManagePage';
-import { OrdersDuplicatePage } from './modules/orders/OrdersDuplicatePage';
 import { OrdersPackagingPage } from './modules/orders/OrdersPackagingPage';
 import { OrdersHandoverPage } from './modules/orders/OrdersHandoverPage';
 import { OrdersShippingPendingPage } from './modules/orders/OrdersShippingPendingPage';
@@ -69,6 +69,7 @@ const router = createBrowserRouter([
       { path: 'warehouse/transfers', element: <WarehouseTransferPage /> },
       { path: 'warehouse/transfers/create', element: <WarehouseTransferCreatePage /> },
       { path: 'warehouse/audit', element: <WarehouseAuditPage /> },
+      { path: 'warehouse/audit/create', element: <WarehouseAuditCreatePage /> },
       { path: 'warehouse/drafts', element: <WarehouseDraftPage /> },
       { path: 'warehouse/history', element: <WarehouseHistoryPage /> },
 
@@ -91,7 +92,6 @@ const router = createBrowserRouter([
 
       // ── Đơn hàng ────────────────────────────────────────────
       { path: 'orders/manage', element: <OrdersManagePage /> },
-      { path: 'orders/duplicate', element: <OrdersDuplicatePage /> },
       { path: 'orders/packing', element: <OrdersPackagingPage /> },
       { path: 'orders/handover', element: <OrdersHandoverPage /> },
       { path: 'orders/shipping-pending', element: <OrdersShippingPendingPage /> },

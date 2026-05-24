@@ -88,3 +88,36 @@ const WarehouseTransferSchema = new Schema({
 WarehouseTransferSchema.index({ id: 'text', warehouse: 'text', type: 'text', creator: 'text' });
 export const WarehouseTransfer = model('WarehouseTransfer', WarehouseTransferSchema);
 
+const InventoryCheckSchema = new Schema({
+  id: { type: String, required: true, unique: true },
+  date: String,
+  type: String,
+  warehouse: String,
+  creator: String,
+  spCount: { type: Number, default: 0 },
+  qty: { type: Number, default: 0 },
+  note: String,
+  missingSp: String,
+  balance: String,
+}, { timestamps: true, strict: false });
+
+InventoryCheckSchema.index({ id: 'text', warehouse: 'text', creator: 'text' });
+export const InventoryCheck = model('InventoryCheck', InventoryCheckSchema);
+
+
+const InventoryCheckProductSchema = new Schema({
+  date: String,
+  warehouse: String,
+  productName: String,
+  cost: { type: Number, default: 0 },
+  price: { type: Number, default: 0 },
+  stock: { type: Number, default: 0 },
+  transferring: { type: Number, default: 0 },
+  actualStock: { type: Number, default: 0 },
+  difference: { type: Number, default: 0 },
+  description: String,
+}, { timestamps: true, strict: false });
+
+InventoryCheckProductSchema.index({ productName: 'text', warehouse: 'text' });
+export const InventoryCheckProduct = model('InventoryCheckProduct', InventoryCheckProductSchema);
+

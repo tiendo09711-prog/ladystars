@@ -11,8 +11,319 @@ import {
   OrderSource,
   OrderHistory,
 } from './orders.models.js';
+import { Product } from '../product/product.models.js';
 
 const router = Router();
+
+router.get('/packaging/scan', async (req, res) => {
+  try {
+    const query = String(req.query.query || '').trim();
+    if (!query) {
+      return res.status(400).json({ message: 'Yêu cầu mã đơn hàng' });
+    }
+    // Find order by code (exact or case insensitive)
+    const order = await Order.findOne({
+      $or: [
+        { orderCode: query },
+        { orderCode: new RegExp(`^${query}$`, 'i') }
+      ]
+    }).lean();
+    if (!order) {
+      return res.status(404).json({ message: 'Không tìm thấy đơn hàng với mã này' });
+    }
+    res.json(order);
+  } catch (err: any) {
+    res.status(500).json({ message: err.message || 'Lỗi server' });
+  }
+});
+
+router.post('/packaging/:id/pack', async (req, res) => {
+  try {
+    const orderId = req.params.id;
+    const { products, packageWeight, packagingMaterial, packer, forcePack } = req.body;
+
+    const order = await Order.findById(orderId);
+    if (!order) {
+      return res.status(404).json({ message: 'Không tìm thấy đơn hàng' });
+    }
+
+    // Update order products scanned quantities
+    if (Array.isArray(products)) {
+      for (const p of products) {
+        const orderProd = (order as any).products.find((op: any) => String(op.productId) === String(p.productId) || op.sku === p.sku);
+        if (orderProd) {
+          orderProd.scannedQuantity = Number(p.scannedQuantity || 0);
+        }
+      }
+    }
+
+    // Check if all items are fully scanned or forcePack is true
+    const isFullyScanned = (order as any).products.every((op: any) => op.scannedQuantity >= op.quantity);
+    const markAsPacked = isFullyScanned || forcePack;
+    if (markAsPacked) {
+      order.status = 'Đã đóng gói';
+    }
+    await order.save();
+
+    // Upsert the OrderPackaging document
+    const userId = (req as any).user?.sub;
+    const packedAt = new Date().toLocaleString('vi-VN');
+    await OrderPackaging.findOneAndUpdate(
+      { orderCode: order.orderCode },
+      {
+        orderCode: order.orderCode,
+        customerName: order.customerName,
+        packer: packer || 'Hệ thống',
+        packageWeight: Number(packageWeight || 0),
+        packagingMaterial: packagingMaterial || 'Hộp carton',
+        status: markAsPacked ? 'Đã đóng gói' : 'Đang đóng gói',
+        packedAt: markAsPacked ? packedAt : '',
+        userId: userId || null
+      },
+      { upsert: true, new: true }
+    );
+
+    res.json({ success: true, order, isFullyScanned: markAsPacked });
+  } catch (err: any) {
+    res.status(500).json({ message: err.message || 'Lỗi server' });
+  }
+});
+
+router.post('/manage/bulk-action', async (req, res) => {
+  try {
+    const { action, ids, status, warehouse, mainOrderCode, handoverId } = req.body;
+    const userId = (req as any).user?.sub;
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ message: 'Vui lòng cung cấp danh sách ID đơn hàng' });
+    }
+
+    if (action === 'status') {
+      if (!status) return res.status(400).json({ message: 'Thiếu trạng thái mới' });
+      await Order.updateMany({ _id: { $in: ids } }, { status });
+      return res.json({ success: true, message: `Đã cập nhật trạng thái mới cho ${ids.length} đơn hàng` });
+    }
+
+    if (action === 'warehouse') {
+      if (!warehouse) return res.status(400).json({ message: 'Thiếu kho hàng mới' });
+      await Order.updateMany({ _id: { $in: ids } }, { warehouse });
+      return res.json({ success: true, message: `Đã cập nhật kho hàng cho ${ids.length} đơn hàng` });
+    }
+
+    if (action === 'delete') {
+      await Order.deleteMany({ _id: { $in: ids } });
+      return res.json({ success: true, message: `Đã xóa ${ids.length} đơn hàng` });
+    }
+
+    if (action === 'merge') {
+      if (!mainOrderCode) {
+        return res.status(400).json({ message: 'Vui lòng cung cấp mã đơn hàng chính để gộp' });
+      }
+      const mainOrder = await Order.findOne({ orderCode: mainOrderCode });
+      if (!mainOrder) {
+        return res.status(404).json({ message: `Không tìm thấy đơn hàng chính với mã ${mainOrderCode}` });
+      }
+
+      const allOrders = await Order.find({ _id: { $in: ids } });
+      const secondaryOrders = allOrders.filter(o => o.orderCode !== mainOrderCode);
+
+      if (secondaryOrders.length === 0) {
+        return res.status(400).json({ message: 'Không tìm thấy các đơn phụ hợp lệ để gộp' });
+      }
+
+      let additionalAmount = 0;
+
+      for (const order of secondaryOrders) {
+        additionalAmount += order.totalAmount || 0;
+        if (order.products) {
+          for (const p of order.products) {
+            const existing = (mainOrder.products as any).find((mp: any) => mp.sku === p.sku);
+            if (existing) {
+              existing.quantity += p.quantity;
+              existing.scannedQuantity += p.scannedQuantity;
+            } else {
+              (mainOrder.products as any).push({
+                productId: p.productId,
+                sku: p.sku,
+                productName: p.productName,
+                quantity: p.quantity,
+                scannedQuantity: p.scannedQuantity
+              });
+            }
+          }
+        }
+        order.status = 'Đã gộp';
+        order.note = order.note 
+          ? `${order.note}\n[Đã gộp vào đơn ${mainOrderCode}]` 
+          : `[Đã gộp vào đơn ${mainOrderCode}]`;
+        await order.save();
+      }
+
+      mainOrder.totalAmount = (mainOrder.totalAmount || 0) + additionalAmount;
+      const mergedCodesList = secondaryOrders.map(o => o.orderCode).join(', ');
+      mainOrder.note = mainOrder.note
+        ? `${mainOrder.note}\n[Đã gộp các đơn: ${mergedCodesList} vào đơn này]`
+        : `[Đã gộp các đơn: ${mergedCodesList} vào đơn này]`;
+      
+      await mainOrder.save();
+
+      return res.json({ success: true, message: `Gộp thành công ${secondaryOrders.length} đơn vào đơn chính ${mainOrderCode}` });
+    }
+
+    if (action === 'split') {
+      const orders = await Order.find({ _id: { $in: ids } });
+      let splitCount = 0;
+
+      for (const order of orders) {
+        if (!order.products || order.products.length <= 1) {
+          continue;
+        }
+
+        const totalProductsCount = order.products.length;
+        const productIds = order.products.map(p => p.productId);
+        const productsFromDb = await Product.find({ _id: { $in: productIds } });
+        
+        let sumPrices = 0;
+        const priceMap: Record<string, number> = {};
+        for (const pDb of productsFromDb) {
+          priceMap[String(pDb._id)] = pDb.price || 0;
+        }
+        
+        for (const op of order.products) {
+          const price = priceMap[String(op.productId)] || 0;
+          sumPrices += price * op.quantity;
+        }
+
+        const sumQuantities = order.products.reduce((acc, p) => acc + p.quantity, 0);
+
+        for (let i = 0; i < totalProductsCount; i++) {
+          const p = order.products[i];
+          const subCode = `${order.orderCode}-${i + 1}`;
+          
+          let subAmount = 0;
+          if (sumPrices > 0) {
+            const itemPrice = priceMap[String(p.productId)] || 0;
+            subAmount = Math.round((order.totalAmount || 0) * (itemPrice * p.quantity) / sumPrices);
+          } else {
+            subAmount = Math.round((order.totalAmount || 0) * p.quantity / sumQuantities);
+          }
+
+          const subOrder = new Order({
+            orderCode: subCode,
+            customerName: order.customerName,
+            customerPhone: order.customerPhone,
+            shippingAddress: order.shippingAddress,
+            paymentMethod: order.paymentMethod,
+            totalAmount: subAmount,
+            status: order.status,
+            warehouse: order.warehouse,
+            deliveryStatus: order.deliveryStatus,
+            note: order.note ? `${order.note}\n[Được tách từ đơn gốc ${order.orderCode}]` : `[Được tách từ đơn gốc ${order.orderCode}]`,
+            products: [{
+              productId: p.productId,
+              sku: p.sku,
+              productName: p.productName,
+              quantity: p.quantity,
+              scannedQuantity: p.scannedQuantity
+            }],
+            userId: order.userId
+          });
+          await subOrder.save();
+        }
+
+        order.status = 'Đã tách';
+        order.note = order.note ? `${order.note}\n[Đã tách thành ${totalProductsCount} đơn phụ]` : `[Đã tách thành ${totalProductsCount} đơn phụ]`;
+        await order.save();
+        splitCount++;
+      }
+
+      return res.json({ success: true, message: `Đã tách thành công ${splitCount} đơn hàng Mega Live` });
+    }
+
+    if (action === 'send-carrier') {
+      const orders = await Order.find({ _id: { $in: ids } });
+      for (const order of orders) {
+        order.deliveryStatus = 'Đang giao';
+        order.status = 'Đang chuyển';
+        await order.save();
+
+        await OrderShippingPending.findOneAndUpdate(
+          { orderCode: order.orderCode },
+          {
+            orderCode: order.orderCode,
+            carrier: 'Giao hàng nhanh',
+            customerName: order.customerName,
+            customerPhone: order.customerPhone,
+            shippingFee: 30000,
+            codAmount: order.paymentMethod === 'COD' ? order.totalAmount : 0,
+            status: 'Chờ lấy hàng',
+            userId: userId || null
+          },
+          { upsert: true, new: true }
+        );
+      }
+      return res.json({ success: true, message: `Đã chuyển tiếp ${ids.length} đơn sang hãng vận chuyển` });
+    }
+
+    if (action === 'add-handover') {
+      if (!handoverId) {
+        return res.status(400).json({ message: 'Thiếu ID biên bản bàn giao' });
+      }
+      const handover = await OrderHandover.findById(handoverId);
+      if (!handover) {
+        return res.status(404).json({ message: 'Không tìm thấy biên bản bàn giao' });
+      }
+
+      const orders = await Order.find({ _id: { $in: ids } });
+      for (const order of orders) {
+        order.deliveryStatus = 'Đang giao';
+        order.note = order.note 
+          ? `${order.note}\n[Đã thêm vào biên bản bàn giao: ${handover.handoverCode}]` 
+          : `[Đã thêm vào biên bản bàn giao: ${handover.handoverCode}]`;
+        await order.save();
+      }
+
+      handover.orderCount = (handover.orderCount || 0) + orders.length;
+      handover.status = 'Đã bàn giao';
+      await handover.save();
+
+      return res.json({ success: true, message: `Đã gán ${orders.length} đơn hàng vào biên bản ${handover.handoverCode}` });
+    }
+
+    if (action === 'reconcile') {
+      const orders = await Order.find({ _id: { $in: ids } });
+      for (const order of orders) {
+        order.note = order.note ? `${order.note}\n[Đã thêm đối soát]` : `[Đã thêm đối soát]`;
+        await order.save();
+      }
+      return res.json({ success: true, message: `Đã đánh dấu đối soát cho ${ids.length} đơn hàng` });
+    }
+
+    if (action === 'einvoice-draft') {
+      const orders = await Order.find({ _id: { $in: ids } });
+      for (const order of orders) {
+        order.eInvoiceStatus = 'Nháp';
+        order.note = order.note ? `${order.note}\n[Đã tạo hóa đơn nháp]` : `[Đã tạo hóa đơn nháp]`;
+        await order.save();
+      }
+      return res.json({ success: true, message: `Đã tạo hóa đơn nháp cho ${ids.length} đơn` });
+    }
+
+    if (action === 'einvoice-issue') {
+      const orders = await Order.find({ _id: { $in: ids } });
+      for (const order of orders) {
+        order.eInvoiceStatus = 'Đã phát hành';
+        order.note = order.note ? `${order.note}\n[Đã phát hành hóa đơn]` : `[Đã phát hành hóa đơn]`;
+        await order.save();
+      }
+      return res.json({ success: true, message: `Đã phát hành hóa đơn cho ${ids.length} đơn` });
+    }
+
+    return res.status(400).json({ message: `Hành động bulk-action "${action}" không hợp lệ` });
+  } catch (err: any) {
+    res.status(500).json({ message: err.message || 'Lỗi server' });
+  }
+});
 
 router.use('/manage', crudRoutes(Order));
 router.use('/duplicates', crudRoutes(OrderDuplicate));

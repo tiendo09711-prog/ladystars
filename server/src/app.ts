@@ -20,6 +20,8 @@ import printFormsRoutes from './modules/printForms/printForms.routes.js';
 import dashboardRoutes from './modules/dashboard/dashboard.routes.js';
 import warehouseRoutes from './modules/warehouse/warehouse.routes.js';
 import ordersRoutes from './modules/orders/orders.routes.js';
+import { Branch } from './core/org/branch.model.js';
+import { crudRoutes } from './core/utils/routeFactory.js';
 
 const app = express();
 const allowedOrigins = new Set([env.clientUrl, 'http://localhost:5173', 'http://localhost:5174']);
@@ -43,6 +45,7 @@ app.use(morgan('dev'));
 
 app.get('/health', (_, res) => res.json({ ok: true }));
 app.use('/api/auth', authRoutes);
+app.use('/api/system/branches', requireAuth, crudRoutes(Branch));
 app.use('/api/system', requireAuth, requireOwner, systemRoutes);
 app.use('/api/staff', requireAuth, requireOwner, staffRoutes);
 app.use('/api/settings', requireAuth, settingsRoutes);

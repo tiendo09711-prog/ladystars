@@ -10,9 +10,18 @@ const OrderSchema = new Schema({
   shippingAddress: String,
   paymentMethod: { type: String, default: 'COD' },
   totalAmount: money,
-  status: { type: String, default: 'Chờ xử lý' },
+  status: { type: String, default: 'Cần xử lí' },
+  warehouse: String,
   deliveryStatus: { type: String, default: 'Chờ lấy hàng' },
   note: String,
+  products: [{
+    productId: { type: Schema.Types.ObjectId, ref: 'Product' },
+    sku: String,
+    productName: String,
+    quantity: { type: Number, default: 1 },
+    scannedQuantity: { type: Number, default: 0 }
+  }],
+  eInvoiceStatus: { type: String, default: 'Chưa tạo' },
   userId: { type: Schema.Types.ObjectId, ref: 'User' },
 }, { timestamps: true });
 OrderSchema.index({ orderCode: 'text', customerName: 'text', customerPhone: 'text' });

@@ -45,6 +45,7 @@ const ProductSchema = new Schema({
   shelfId: { type: Schema.Types.ObjectId, ref: 'Shelf' },
   cost: money,
   price: money,
+  wholesalePrice: money,
   qty: { type: Number, default: 0 },
   weight: Number,
   weightType: { type: String, enum: ['gram', 'kg'], default: 'gram' },
@@ -65,6 +66,9 @@ const ProductSchema = new Schema({
   origin: String,
   color: String,
   size: String,
+  barcode: String,
+  parentCode: String,
+  parentName: String,
 }, { timestamps: true, strict: false });
 ProductSchema.index({ name: 'text', code: 'text' });
 export const Product = model('Product', ProductSchema);

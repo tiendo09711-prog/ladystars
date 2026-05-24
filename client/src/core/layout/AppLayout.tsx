@@ -81,7 +81,6 @@ const baseMenuGroups = [
     label: 'Đơn hàng',
     items: [
       { to: '/orders/manage', label: 'Đơn hàng', icon: ShoppingCart },
-      { to: '/orders/duplicate', label: 'Đơn trùng', icon: Search },
       { to: '/orders/packing', label: 'Đóng gói', icon: Package },
       { to: '/orders/handover', label: 'Biên bản bàn giao', icon: FileText },
       { to: '/orders/shipping-pending', label: 'Chờ gửi vận chuyển', icon: Truck },

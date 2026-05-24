@@ -29,7 +29,7 @@ export function crudController<T>(model: Model<T>) {
   return {
     async list(req: Request, res: Response) {
       const page = Math.max(Number(req.query.page ?? 1), 1);
-      const limit = Math.min(Math.max(Number(req.query.limit ?? 20), 1), 100);
+      const limit = Math.min(Math.max(Number(req.query.limit ?? 1000), 1), 1000);
       const q = String(req.query.q ?? '').trim();
       const sortField = req.query.sort ? String(req.query.sort) : 'createdAt';
       const sortOrder = req.query.order === 'asc' ? 1 : -1;
@@ -45,8 +45,13 @@ export function crudController<T>(model: Model<T>) {
         if (RESERVED.has(key)) continue;
         const strVal = String(val ?? '').trim();
         if (!strVal) continue;
-        // Use case-insensitive exact match for string fields
-        filter[key] = { $regex: `^${strVal}$`, $options: 'i' };
+        if (strVal.includes(',')) {
+          const parts = strVal.split(',').map(p => p.trim()).filter(Boolean);
+          filter[key] = { $in: parts.map(p => new RegExp(`^${p}$`, 'i')) };
+        } else {
+          // Use case-insensitive exact match for string fields
+          filter[key] = { $regex: `^${strVal}$`, $options: 'i' };
+        }
       }
 
       const [items, total] = await Promise.all([

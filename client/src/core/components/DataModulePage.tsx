@@ -1,5 +1,5 @@
 import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from 'react';
-import { FileDown, FileUp, Filter, Plus, RefreshCw, Search, Trash2, X } from 'lucide-react';
+import { FileDown, FileUp, Filter, Plus, RefreshCw, Search, Trash2, X, ChevronDown } from 'lucide-react';
 import { http } from '../api/http';
 
 export type DataField = {
@@ -29,6 +29,18 @@ export type RowAction = {
   confirm?: string;
 };
 
+export type BulkAction = {
+  label: string;
+  icon?: ReactNode;
+  danger?: boolean;
+  onClick: (selectedItems: Record<string, any>[], onSuccess: () => void) => void;
+};
+
+export type BulkActionGroup = {
+  label?: string;
+  actions: BulkAction[];
+};
+
 export type DataModulePageProps = {
   title: string;
   subtitle: string;
@@ -44,6 +56,8 @@ export type DataModulePageProps = {
   normalizePayload?: (payload: Record<string, unknown>) => Record<string, unknown>;
   actions?: RowAction[];
   onPrimaryActionClick?: () => void;
+  bulkActionGroups?: BulkActionGroup[];
+  extraHeaderButtons?: ReactNode;
 };
 
 function getValue(item: Record<string, any>, key: string) {
@@ -85,6 +99,8 @@ export function DataModulePage({
   normalizePayload,
   actions = [],
   onPrimaryActionClick,
+  bulkActionGroups,
+  extraHeaderButtons,
 }: DataModulePageProps) {
   const [items, setItems] = useState<Record<string, any>[]>([]);
   const [loading, setLoading] = useState(true);
@@ -96,12 +112,15 @@ export function DataModulePage({
   const [error, setError] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
   const [showQuickDropdown, setShowQuickDropdown] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showBulkDropdown, setShowBulkDropdown] = useState(false);
 
   useEffect(() => {
-    if (!showDropdown && !showQuickDropdown) return;
+    if (!showDropdown && !showQuickDropdown && !showBulkDropdown) return;
     const handleClose = () => {
       setShowDropdown(false);
       setShowQuickDropdown(false);
+      setShowBulkDropdown(false);
     };
     window.addEventListener('click', handleClose);
     return () => window.removeEventListener('click', handleClose);
@@ -131,7 +150,11 @@ export function DataModulePage({
         ? fields.some((field) => String(getValue(item, field.key) ?? '').toLowerCase().includes(q))
         : true;
       const quickMatch = quickFilter
-        ? Object.values(item).some((value) => String(value).toLowerCase() === quickFilter.toLowerCase())
+        ? Object.values(item).some((value) => {
+            const strVal = String(value).toLowerCase();
+            const filterVals = quickFilter.toLowerCase().split(',');
+            return filterVals.some(fv => strVal === fv.trim());
+          })
         : true;
       return textMatch && quickMatch;
     });
@@ -202,6 +225,21 @@ export function DataModulePage({
     URL.revokeObjectURL(url);
   };
 
+  const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.checked) {
+      setSelectedIds(new Set(filteredItems.map(item => item._id)));
+    } else {
+      setSelectedIds(new Set());
+    }
+  };
+
+  const handleSelectRow = (id: string, checked: boolean) => {
+    const newSelected = new Set(selectedIds);
+    if (checked) newSelected.add(id);
+    else newSelected.delete(id);
+    setSelectedIds(newSelected);
+  };
+
   return (
     <div className="page-stack">
       <div className="page-heading">
@@ -222,6 +260,51 @@ export function DataModulePage({
           <button className="btn btn-outline" type="button" onClick={() => alert('Dùng API CRUD hoặc npm run load để nạp dữ liệu mẫu lên MongoDB Atlas.')} title="Nhập dữ liệu">
             <FileUp size={16} /> Nhập
           </button>
+          {bulkActionGroups && bulkActionGroups.length > 0 && (
+            <div className="dropdown-container">
+              <button
+                className="btn btn-outline"
+                type="button"
+                disabled={selectedIds.size === 0}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowBulkDropdown(!showBulkDropdown);
+                }}
+              >
+                Thao tác ({selectedIds.size}) <ChevronDown size={16} style={{ marginLeft: 4 }} />
+              </button>
+              {showBulkDropdown && (
+                <div className="dropdown-menu" style={{ width: 280, right: 0, left: 'auto' }}>
+                  {bulkActionGroups.map((group, gIdx) => (
+                    <div key={gIdx}>
+                      {group.label && <div style={{ padding: '8px 12px', fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase' }}>{group.label}</div>}
+                      {group.actions.map((action, aIdx) => (
+                        <button
+                          key={aIdx}
+                          className={`dropdown-item`}
+                          style={action.danger ? { color: '#ef4444' } : {}}
+                          type="button"
+                          onClick={() => {
+                            setShowBulkDropdown(false);
+                            const items = filteredItems.filter(i => selectedIds.has(i._id));
+                            action.onClick(items, () => {
+                              setSelectedIds(new Set());
+                              load();
+                            });
+                          }}
+                        >
+                          {action.icon}
+                          <span>{action.label}</span>
+                        </button>
+                      ))}
+                      {gIdx < bulkActionGroups.length - 1 && <div style={{ height: 1, background: '#e2e8f0', margin: '4px 0' }}></div>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          {extraHeaderButtons}
           {primaryActions && primaryActions.length > 0 ? (
             <div className="dropdown-container">
               <button
@@ -349,7 +432,14 @@ export function DataModulePage({
             <table className="data-table">
               <thead>
                 <tr>
-                  <th className="check-cell"><input type="checkbox" aria-label="Chọn tất cả" /></th>
+                  <th className="check-cell">
+                    <input 
+                      type="checkbox" 
+                      aria-label="Chọn tất cả" 
+                      checked={filteredItems.length > 0 && selectedIds.size === filteredItems.length}
+                      onChange={handleSelectAll} 
+                    />
+                  </th>
                   {fields.map((field) => <th key={field.key}>{field.label}</th>)}
                   <th className="action-cell">Thao tác</th>
                 </tr>
@@ -367,7 +457,14 @@ export function DataModulePage({
                 )}
                 {!loading && filteredItems.map((item) => (
                   <tr key={item._id}>
-                    <td className="check-cell"><input type="checkbox" aria-label={`Chọn ${item.name ?? item.code ?? item._id}`} /></td>
+                    <td className="check-cell">
+                      <input 
+                        type="checkbox" 
+                        aria-label={`Chọn ${item.name ?? item.code ?? item._id}`}
+                        checked={selectedIds.has(item._id)}
+                        onChange={(e) => handleSelectRow(item._id, e.target.checked)} 
+                      />
+                    </td>
                     {fields.map((field) => {
                       const value = getValue(item, field.key);
                       const type = field.type;
