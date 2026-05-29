@@ -61,13 +61,7 @@ const baseMenuGroups = [
       { to: '/warehouse/history', label: 'Lịch sử sửa xóa', icon: History },
     ],
   },
-  {
-    label: 'Bán hàng',
-    items: [
-      { to: '/sales', label: 'Bán hàng - thanh toán', icon: ShoppingCart },
-      { to: '/customers', label: 'Khách hàng', icon: Users },
-    ],
-  },
+
   {
     label: 'Kênh bán - Cửa hàng',
     items: [
